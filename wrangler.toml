@@ -1,0 +1,15 @@
+name = "deuda-app-multiusuario"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "dist"
+
+# 1) Crea la DB:
+#    wrangler d1 create debt_app_db
+# 2) Copia aquí el database_id que te da Cloudflare.
+# 3) Aplica migraciones:
+#    wrangler d1 migrations apply debt_app_db --local
+#    wrangler d1 migrations apply debt_app_db --remote
+[[d1_databases]]
+binding = "DB"
+database_name = "debt_app_db"
+database_id = "REEMPLAZA-ESTO-CON-TU-DATABASE_ID"
+migrations_dir = "migrations"
