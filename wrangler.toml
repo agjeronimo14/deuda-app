@@ -11,5 +11,6 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "debt_app_db"
-database_id = "REEMPLAZA-ESTO-CON-TU-DATABASE_ID"
+database_id = "f922a7fc-70fc-49fc-8085-c2f4d28cbe5f
+"
 migrations_dir = "migrations"
