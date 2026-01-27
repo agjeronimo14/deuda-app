@@ -22,7 +22,7 @@ function constTimeEqual(a, b) {
 
 export async function hashPassword(password) {
   const salt = crypto.getRandomValues(new Uint8Array(16))
-  const iterations = 210_000
+  const iterations = 100_000
   const key = await crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits'])
   const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', hash:'SHA-256', salt, iterations }, key, 256)
   const hash = new Uint8Array(bits)
