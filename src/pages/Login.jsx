@@ -3,7 +3,6 @@ import { api } from '../api.js'
 
 export default function Login({ onAuthed }) {
   const [mode, setMode] = React.useState('login')
-  const [email, setEmail] = React.useState('')
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState('')
@@ -15,9 +14,9 @@ export default function Login({ onAuthed }) {
     setBusy(true)
     try {
       if (mode === 'register') {
-        await api('/api/auth/register', { method: 'POST', body: { email, username, password } })
+        await api('/api/auth/register', { method: 'POST', body: { username, password } })
       }
-      await api('/api/auth/login', { method: 'POST', body: { email, password } })
+      await api('/api/auth/login', { method: 'POST', body: { username, password } })
       await onAuthed?.()
     } catch (err) {
       setError(err.message || 'Error')
@@ -37,15 +36,8 @@ export default function Login({ onAuthed }) {
       </div>
 
       <form onSubmit={submit}>
-        <label>Email</label>
-        <input className="input" value={email} onChange={e=>setEmail(e.target.value)} placeholder="tu@email.com" required />
-
-        {mode === 'register' && (
-          <>
-            <label>Usuario (opcional)</label>
-            <input className="input" value={username} onChange={e=>setUsername(e.target.value)} placeholder="alex" />
-          </>
-        )}
+        <label>Usuario</label>
+        <input className="input" value={username} onChange={e=>setUsername(e.target.value)} placeholder="alex" required />
 
         <label>Contraseña</label>
         <input className="input" type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" required />
@@ -55,6 +47,10 @@ export default function Login({ onAuthed }) {
         <div className="row" style={{marginTop:12}}>
           <button className="btn" disabled={busy}>{busy ? '...' : (mode === 'login' ? 'Entrar' : 'Crear y entrar')}</button>
         </div>
+
+        <p className="small" style={{marginTop:10}}>
+          Nota: el sistema ya no usa email. Solo <b>usuario + contraseña</b>.
+        </p>
       </form>
     </div>
   )

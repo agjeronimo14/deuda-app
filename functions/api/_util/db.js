@@ -23,3 +23,7 @@ export async function updateDebtStatusIfPaid(DB, debtId) {
     await DB.prepare(`UPDATE debts SET status='OPEN', updated_at=datetime('now') WHERE id=? AND status='PAID'`).bind(debtId).run()
   }
 }
+
+export async function getUserByUsername(DB, username) {
+  return await DB.prepare('SELECT id, email, username, password_hash FROM users WHERE username = ?').bind(username).first()
+}

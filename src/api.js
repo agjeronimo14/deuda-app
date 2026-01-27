@@ -5,8 +5,17 @@ export async function api(path, { method = 'GET', body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
     credentials: 'include',
   })
+
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // El server devolvió HTML (ej: error 500). Evitamos el "Unexpected token <"
+    throw new Error('Respuesta no-JSON del server (posible error 500). Revisa Cloudflare Pages → Functions logs.')
+  }
+
   if (!res.ok) {
     const msg = data?.error || `HTTP ${res.status}`
     throw new Error(msg)
