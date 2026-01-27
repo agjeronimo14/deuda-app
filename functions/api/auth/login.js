@@ -24,7 +24,8 @@ export async function onRequestPost(context) {
 
     const { cookie } = await createSession(context, user.id)
     return json({ ok: true, user: { id: user.id, username: user.username } }, { headers: { 'Set-Cookie': cookie } })
-  } catch {
-    return error(500, 'Error en login (revisa DB/binding o schema).')
+  } catch (e) {
+    const msg = (e && e.message) ? e.message : String(e)
+    return error(500, `DB error: ${msg}`)
   }
 }

@@ -29,6 +29,8 @@ export async function onRequestPost(context) {
 
     return json({ ok: true, user_id: res.meta.last_row_id })
   } catch (e) {
-    return error(500, 'Error creando usuario (revisa que la DB correcta esté enlazada al binding DB y tenga migraciones).')
+    // DEV: devolvemos el motivo real para diagnosticar (puedes quitarlo después)
+    const msg = (e && e.message) ? e.message : String(e)
+    return error(500, `DB error: ${msg}`)
   }
 }
