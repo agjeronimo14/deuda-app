@@ -1,5 +1,17 @@
 export async function getUserByEmail(DB, email) {
-  return await DB.prepare('SELECT id, email, username, password_hash FROM users WHERE email = ?').bind(email).first()
+  try {
+    return await DB.prepare('SELECT id, email, username, password_hash, role, is_active FROM users WHERE email = ?').bind(email).first()
+  } catch {
+    return await DB.prepare('SELECT id, email, username, password_hash FROM users WHERE email = ?').bind(email).first()
+  }
+}
+
+export async function getUserByUsername(DB, username) {
+  try {
+    return await DB.prepare('SELECT id, email, username, password_hash, role, is_active FROM users WHERE username = ?').bind(username).first()
+  } catch {
+    return await DB.prepare('SELECT id, email, username, password_hash FROM users WHERE username = ?').bind(username).first()
+  }
 }
 
 export async function computeBalanceCents(DB, debtId) {
@@ -22,8 +34,4 @@ export async function updateDebtStatusIfPaid(DB, debtId) {
   } else {
     await DB.prepare(`UPDATE debts SET status='OPEN', updated_at=datetime('now') WHERE id=? AND status='PAID'`).bind(debtId).run()
   }
-}
-
-export async function getUserByUsername(DB, username) {
-  return await DB.prepare('SELECT id, email, username, password_hash FROM users WHERE username = ?').bind(username).first()
 }

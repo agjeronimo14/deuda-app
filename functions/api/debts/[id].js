@@ -7,13 +7,23 @@ async function getDebtAccess(DB, debtId, userId) {
   if (!debt) return { debt: null, access: null, share: null }
 
   if (Number(debt.owner_user_id) === Number(userId)) {
-    const share = await DB.prepare('SELECT * FROM debt_shares WHERE debt_id=?').bind(debtId).first()
+    const share = await DB.prepare(`
+      SELECT s.*, u.username AS counterparty_username
+      FROM debt_shares s
+      LEFT JOIN users u ON u.id = s.counterparty_user_id
+      WHERE s.debt_id=?
+    `).bind(debtId).first()
     return { debt, access:'OWNER', share }
   }
 
-  const share = await DB.prepare('SELECT * FROM debt_shares WHERE debt_id=? AND counterparty_user_id=?').bind(debtId, userId).first()
-  if (share) return { debt, access:'COUNTERPARTY', share }
+  const share = await DB.prepare(`
+    SELECT s.*, u.username AS counterparty_username
+    FROM debt_shares s
+    LEFT JOIN users u ON u.id = s.counterparty_user_id
+    WHERE s.debt_id=? AND s.counterparty_user_id=?
+  `).bind(debtId, userId).first()
 
+  if (share) return { debt, access:'COUNTERPARTY', share }
   return { debt, access:null, share:null }
 }
 
@@ -50,6 +60,8 @@ export async function onRequestGet(context) {
       ...share,
       id: Number(share.id),
       can_confirm: Number(share.can_confirm) === 1,
+      counterparty_user_id: share.counterparty_user_id ? Number(share.counterparty_user_id) : null,
+      counterparty_username: share.counterparty_username || null,
     } : null,
     balance_cents: Number(balance_cents ?? 0),
     payments: (paymentsRes.results || []).map(p => ({

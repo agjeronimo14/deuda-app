@@ -4,7 +4,7 @@ import { api } from './api.js'
 import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import DebtDetail from './pages/DebtDetail.jsx'
-import InviteAccept from './pages/InviteAccept.jsx'
+import Admin from './pages/Admin.jsx'
 
 function useMe() {
   const [me, setMe] = React.useState(null)
@@ -50,9 +50,10 @@ export default function App() {
         </div>
         <div className="row" style={{alignItems:'center'}}>
           <Link className="btn secondary" to="/">Inicio</Link>
+          {me?.role === 'admin' && <Link className="btn secondary" to="/admin">Admin</Link>}
           {me ? (
             <>
-              <span className="pill">👤 {me.username || me.email}</span>
+              <span className="pill">👤 {me.username || me.email} {me.role === 'admin' ? '· ADMIN' : ''}</span>
               <button className="btn secondary" onClick={logout}>Salir</button>
             </>
           ) : (
@@ -63,9 +64,9 @@ export default function App() {
 
       <Routes>
         <Route path="/login" element={me ? <Navigate to="/" /> : <Login onAuthed={refresh} />} />
-        <Route path="/" element={me ? <Dashboard /> : <Navigate to="/login" />} />
+        <Route path="/" element={me ? <Dashboard me={me} /> : <Navigate to="/login" />} />
         <Route path="/debts/:id" element={me ? <DebtDetail me={me} /> : <Navigate to="/login" />} />
-        <Route path="/invite/:token" element={me ? <InviteAccept /> : <Navigate to="/login" />} />
+        <Route path="/admin" element={me ? <Admin me={me} /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
 

@@ -1,20 +1,23 @@
-# Deuda App (multiusuario + confirmación de abonos)
+# Deuda App (ADMIN + contraparte con confirmación)
 
 Esta app es una **PWA** (web instalable) con:
 - **Frontend:** React + Vite
 - **Backend:** Cloudflare Pages Functions (`/functions/api/*`)
 - **DB:** Cloudflare D1 (SQLite)
 
-Funciona así:
-- El **owner** crea la deuda y registra abonos.
-- La **contraparte** (la persona a la que le debes / o quien te debe) ve esa deuda y puede **Confirmar / Rechazar** abonos cuando aplique (dirección `I_OWE`).
+## Cómo funciona (v3)
+- Existe un **ADMIN** (el primer usuario creado se vuelve ADMIN automáticamente).
+- El **ADMIN** crea deudas y registra abonos.
+- Al crear una deuda, el sistema genera **usuario + contraseña** para la **contraparte** (ya NO hay tokens).
+- La contraparte entra, ve sus deudas compartidas y puede **Confirmar / Rechazar** abonos cuando aplique (dirección `I_OWE`).
+- Cada abono tiene botón para **exportar recibo en PNG** (desde el navegador).
 
 ---
 
 ## Requisitos
 - Node.js 18+ (recomendado 20)
 - Cuenta Cloudflare
-- `wrangler` (ya viene como devDependency aquí)
+- `wrangler` (devDependency)
 
 ---
 
@@ -39,11 +42,13 @@ npx wrangler d1 create debt_app_db
 
 Copia el `database_id` que te devuelve y pégalo en `wrangler.toml`.
 
-Aplicar migraciones (local y remoto):
+Aplicar migraciones:
 ```bash
 npx wrangler d1 migrations apply debt_app_db --local
 npx wrangler d1 migrations apply debt_app_db --remote
 ```
+
+> Importante para Cloudflare Pages: **aplica la migración remota antes de pushear** el código nuevo, para evitar que el deploy corra con columnas faltantes.
 
 ---
 
@@ -55,53 +60,19 @@ npm run start
 Abre:
 - http://localhost:8788
 
-> Importante: abre SIEMPRE el puerto 8788 (Pages dev), porque ahí están **frontend + /api** en el mismo origen (cookies/sesión funcionan perfecto).
+---
+
+## 4) ADMIN: crear usuarios (panel)
+En producción:
+- Entra con tu usuario ADMIN
+- Ve a **Admin**
+- Crea usuarios manualmente o crea deudas (que generan usuario+contraseña de contraparte)
 
 ---
 
-## 4) Deploy (rápido)
-La forma más fácil es conectar el repo a **Cloudflare Pages** (GitHub) y listo.
-
-Si prefieres CLI, primero build:
-```bash
-npm run build
-```
-y luego:
-```bash
-npx wrangler pages deploy dist
-```
-
----
-
-## Endpoints (resumen)
-Auth:
-- POST `/api/auth/register`
-- POST `/api/auth/login`
-- POST `/api/auth/logout`
-- GET  `/api/auth/me`
-
-Deudas:
-- GET  `/api/debts`
-- POST `/api/debts`
-- GET  `/api/debts/:id`
-- PUT  `/api/debts/:id`
-
-Invites:
-- POST `/api/debts/:id/invite`  → genera token
-- POST `/api/invites/accept`    → aceptar token (requiere login)
-
-Pagos:
-- POST `/api/debts/:id/payments`
-- POST `/api/payments/:id/confirm`
-- POST `/api/payments/:id/reject`
-
----
-
-## Notas de seguridad (MVP)
-- El `invite_token` se guarda hasheado en DB.
-- Cookies `HttpOnly` + `SameSite=Lax`.
-- Para producción, mantén HTTPS (Cloudflare Pages lo hace por defecto).
-
-
-## Cambio importante
-- Autenticación ahora es **solo usuario + contraseña** (no email).
+## 5) Deploy (Cloudflare Pages)
+- Conecta el repo en Cloudflare Pages
+- Build command: `npm run build`
+- Output dir: `dist`
+- Variables:
+  - Binding D1: `DB` → tu D1

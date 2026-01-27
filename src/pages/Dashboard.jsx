@@ -8,7 +8,7 @@ function money(cents, currency='USD') {
   return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
 }
 
-export default function Dashboard() {
+export default function Dashboard({ me }) {
   const [data, setData] = React.useState({ owned: [], shared: [] })
   const [tab, setTab] = React.useState('owned')
   const [loading, setLoading] = React.useState(true)
@@ -30,6 +30,7 @@ export default function Dashboard() {
   React.useEffect(() => { load() }, [])
 
   const list = tab === 'owned' ? data.owned : data.shared
+  const isAdmin = me?.role === 'admin'
 
   return (
     <>
@@ -37,13 +38,19 @@ export default function Dashboard() {
         <div className="split">
           <div>
             <h2>Dashboard</h2>
-            <p className="small">Deudas + abonos. En “Yo debo”, la contraparte confirma o rechaza.</p>
+            <p className="small">En “Yo debo”, la contraparte confirma o rechaza los abonos.</p>
           </div>
           <div className="row">
-            <button className="btn" onClick={() => setOpen(true)}>+ Nueva deuda</button>
+            {isAdmin && <button className="btn" onClick={() => setOpen(true)}>+ Nueva deuda</button>}
             <button className="btn secondary" onClick={load}>Actualizar</button>
           </div>
         </div>
+
+        {!isAdmin && (
+          <p className="small" style={{marginTop:10}}>
+            Tu cuenta es de <b>contraparte</b>: solo puedes ver deudas compartidas contigo y confirmar/rechazar abonos.
+          </p>
+        )}
 
         <div className="hr"></div>
 
@@ -60,7 +67,7 @@ export default function Dashboard() {
                 <th>Título</th>
                 <th>Dirección</th>
                 <th>Saldo</th>
-                <th>Vence</th>
+                <th>Fecha</th>
                 <th></th>
               </tr>
             </thead>
@@ -81,7 +88,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {open && <DebtModal onClose={() => setOpen(false)} onCreated={() => { setOpen(false); load() }} />}
+      {open && <DebtModal onClose={() => setOpen(false)} onCreated={() => { load() }} />}
     </>
   )
 }

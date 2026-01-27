@@ -14,12 +14,88 @@ function badge(status){
   return <span className="badge">NONE</span>
 }
 
-export default function DebtDetail() {
+async function receiptPNG({ debt, payment, me }) {
+  const w = 900, h = 560
+  const canvas = document.createElement('canvas')
+  canvas.width = w; canvas.height = h
+  const ctx = canvas.getContext('2d')
+
+  // background
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, w, h)
+
+  // header
+  ctx.fillStyle = '#111827'
+  ctx.font = 'bold 32px Arial'
+  ctx.fillText('RECIBO DE ABONO', 40, 60)
+
+  ctx.fillStyle = '#374151'
+  ctx.font = '16px Arial'
+  ctx.fillText('Deuda App', 40, 88)
+
+  // box
+  ctx.strokeStyle = '#e5e7eb'
+  ctx.lineWidth = 2
+  ctx.strokeRect(40, 110, w-80, 360)
+
+  const lines = [
+    ['Deuda', debt.title],
+    ['Contraparte', debt.counterparty_name || '—'],
+    ['Usuario', me?.username || me?.email || '—'],
+    ['Fecha abono', payment.paid_at],
+    ['Monto', money(payment.amount_cents, debt.currency)],
+    ['Estatus', payment.confirmation_status],
+    ['Nota', payment.note || '—'],
+  ]
+
+  let y = 150
+  for (const [k,v] of lines) {
+    ctx.fillStyle = '#111827'
+    ctx.font = 'bold 18px Arial'
+    ctx.fillText(`${k}:`, 60, y)
+
+    ctx.fillStyle = '#111827'
+    ctx.font = '18px Arial'
+    // wrap for note
+    const text = String(v ?? '')
+    if (k === 'Nota' && text.length > 60) {
+      const parts = [text.slice(0,60), text.slice(60,120), text.slice(120)]
+      let yy = y
+      for (const part of parts) {
+        if (!part) continue
+        ctx.fillText(part, 220, yy)
+        yy += 26
+      }
+      y = yy - 26
+    } else {
+      ctx.fillText(text, 220, y)
+    }
+    y += 34
+  }
+
+  // footer
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '14px Arial'
+  ctx.fillText(`Generado: ${new Date().toISOString().slice(0,19).replace('T',' ')}`, 40, 520)
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+  const url = URL.createObjectURL(blob)
+
+  // En desktop: descarga. En iPhone: se abre en pestaña para compartir/guardar.
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `recibo-abono-${payment.id}.png`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(()=>URL.revokeObjectURL(url), 3000)
+}
+
+export default function DebtDetail({ me }) {
   const { id } = useParams()
   const [d, setD] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
-  const [inviteToken, setInviteToken] = React.useState('')
   const [payAmount, setPayAmount] = React.useState('')
   const [payDate, setPayDate] = React.useState(() => new Date().toISOString().slice(0,10))
   const [payNote, setPayNote] = React.useState('')
@@ -36,14 +112,6 @@ export default function DebtDetail() {
     }
   }
   React.useEffect(() => { load() }, [id])
-
-  async function createInvite() {
-    setError(''); setInviteToken('')
-    try {
-      const data = await api(`/api/debts/${id}/invite`, { method:'POST', body: {} })
-      setInviteToken(data.token)
-    } catch(e) { setError(e.message || 'Error') }
-  }
 
   async function addPayment() {
     setError('')
@@ -101,28 +169,18 @@ export default function DebtDetail() {
           <h2>Resumen</h2>
           <p><b>Principal:</b> {money(d.debt.principal_cents, d.debt.currency)}</p>
           <p><b>Saldo:</b> {money(d.balance_cents, d.debt.currency)}</p>
-          <p><b>Vence:</b> <span className="small">{d.debt.due_date || '—'}</span></p>
+          <p><b>Fecha:</b> <span className="small">{d.debt.due_date || '—'}</span></p>
+
           {d.share && (
             <p className="small">
-              Compartida: {d.share.accepted_at ? '✅ aceptada' : '⏳ pendiente'} · Puede confirmar: {d.share.can_confirm ? 'sí' : 'no'}
+              Contraparte user: <b>{d.share.counterparty_username || '—'}</b> · Puede confirmar: {d.share.can_confirm ? 'sí' : 'no'}
             </p>
           )}
-        </div>
 
-        {isOwner && (
-          <div className="card" style={{padding:12}}>
-            <h2>Invitar a la contraparte</h2>
-            <p className="small">Genera un token y envíaselo. La contraparte entra en <b>tu misma web</b> y acepta el invite.</p>
-            <button className="btn" onClick={createInvite}>Generar invite</button>
-            {inviteToken && (
-              <div style={{marginTop:10}}>
-                <label>Token (solo se muestra aquí)</label>
-                <input className="input" value={inviteToken} readOnly />
-                <p className="small">Link directo: <code>/invite/{inviteToken}</code></p>
-              </div>
-            )}
-          </div>
-        )}
+          <p className="small" style={{marginTop:8}}>
+            Nota: ya no se usan tokens. La contraparte entra con <b>usuario + contraseña</b>.
+          </p>
+        </div>
 
         {isOwner && (
           <div className="card" style={{padding:12}}>
@@ -142,7 +200,9 @@ export default function DebtDetail() {
             <div className="row" style={{marginTop:10}}>
               <button className="btn ok" onClick={addPayment}>Guardar abono</button>
             </div>
-            <p className="small">Si esta deuda es <b>Yo debo</b> y la contraparte aceptó el invite, el abono queda en <b>PENDING</b> hasta que confirme.</p>
+            <p className="small">
+              Si esta deuda es <b>Yo debo</b>, el abono queda <b>PENDING</b> hasta que la contraparte lo confirme (si tiene cuenta creada).
+            </p>
           </div>
         )}
       </div>
@@ -170,12 +230,15 @@ export default function DebtDetail() {
               <td>{badge(p.confirmation_status)}</td>
               <td className="small">{p.note || ''}</td>
               <td>
-                {isCounterparty && p.confirmation_status === 'PENDING' ? (
-                  <div className="row">
-                    <button className="btn ok" onClick={() => confirm(p.id)}>Confirmar</button>
-                    <button className="btn danger" onClick={() => reject(p.id)}>Rechazar</button>
-                  </div>
-                ) : null}
+                <div className="row">
+                  <button className="btn secondary" onClick={()=>receiptPNG({ debt:d.debt, payment:p, me })}>Recibo PNG</button>
+                  {isCounterparty && p.confirmation_status === 'PENDING' ? (
+                    <>
+                      <button className="btn ok" onClick={() => confirm(p.id)}>Confirmar</button>
+                      <button className="btn danger" onClick={() => reject(p.id)}>Rechazar</button>
+                    </>
+                  ) : null}
+                </div>
               </td>
             </tr>
           ))}

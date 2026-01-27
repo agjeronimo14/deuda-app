@@ -6,10 +6,11 @@ export default function DebtModal({ onClose, onCreated }) {
   const [counterparty_name, setCounterpartyName] = React.useState('')
   const [direction, setDirection] = React.useState('I_OWE')
   const [principal, setPrincipal] = React.useState('')
-  const [due_date, setDueDate] = React.useState('')
+  const [date, setDate] = React.useState(() => new Date().toISOString().slice(0,10))
   const [notes, setNotes] = React.useState('')
   const [error, setError] = React.useState('')
   const [busy, setBusy] = React.useState(false)
+  const [created, setCreated] = React.useState(null)
 
   async function submit(e) {
     e.preventDefault()
@@ -19,7 +20,8 @@ export default function DebtModal({ onClose, onCreated }) {
       const dollars = Number(principal)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
       const principal_cents = Math.round(dollars * 100)
-      await api('/api/debts', { method:'POST', body: { title, counterparty_name, direction, principal_cents, due_date: due_date || null, notes: notes || null, currency: 'USD' } })
+      const resp = await api('/api/debts', { method:'POST', body: { title, counterparty_name, direction, principal_cents, date, notes: notes || null, currency: 'USD' } })
+      setCreated(resp.counterparty ? resp.counterparty : { none: true })
       onCreated?.()
     } catch(e) {
       setError(e.message || 'Error')
@@ -35,6 +37,7 @@ export default function DebtModal({ onClose, onCreated }) {
           <h2>Nueva deuda</h2>
           <button className="btn secondary" onClick={onClose}>Cerrar</button>
         </div>
+
         <form onSubmit={submit}>
           <label>Título</label>
           <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Teléfono, préstamo, renta..." required />
@@ -59,8 +62,8 @@ export default function DebtModal({ onClose, onCreated }) {
               <input className="input" value={principal} onChange={e=>setPrincipal(e.target.value)} placeholder="250.00" required />
             </div>
             <div>
-              <label>Fecha de vencimiento</label>
-              <input className="input" type="date" value={due_date} onChange={e=>setDueDate(e.target.value)} />
+              <label>Fecha</label>
+              <input className="input" type="date" value={date} onChange={e=>setDate(e.target.value)} />
             </div>
           </div>
 
@@ -75,8 +78,17 @@ export default function DebtModal({ onClose, onCreated }) {
           </div>
 
           <p className="small" style={{marginTop:10}}>
-            Luego de crear, puedes generar un <b>invite</b> para que la contraparte confirme abonos (si es “Yo debo”).
+            Al crear la deuda, el sistema genera un <b>usuario + contraseña</b> para la contraparte (si escribes un nombre).
           </p>
+
+          {created && created.username && created.temp_password && (
+            <div className="card" style={{padding:12, marginTop:12}}>
+              <p><b>✅ Cuenta creada para la contraparte</b></p>
+              <p className="small">Usuario: <b>{created.username}</b></p>
+              <p className="small">Contraseña: <b>{created.temp_password}</b></p>
+              <p className="small">Envíale estas credenciales para que entre y confirme/rechace abonos.</p>
+            </div>
+          )}
         </form>
       </div>
     </div>

@@ -2,7 +2,6 @@ import React from 'react'
 import { api } from '../api.js'
 
 export default function Login({ onAuthed }) {
-  const [mode, setMode] = React.useState('login')
   const [username, setUsername] = React.useState('')
   const [password, setPassword] = React.useState('')
   const [error, setError] = React.useState('')
@@ -13,9 +12,6 @@ export default function Login({ onAuthed }) {
     setError('')
     setBusy(true)
     try {
-      if (mode === 'register') {
-        await api('/api/auth/register', { method: 'POST', body: { username, password } })
-      }
       await api('/api/auth/login', { method: 'POST', body: { username, password } })
       await onAuthed?.()
     } catch (err) {
@@ -28,11 +24,8 @@ export default function Login({ onAuthed }) {
   return (
     <div className="card">
       <div className="split">
-        <h2>{mode === 'login' ? 'Iniciar sesión' : 'Crear cuenta'}</h2>
-        <div className="tabs">
-          <button className={'tab ' + (mode==='login'?'active':'')} onClick={() => setMode('login')}>Login</button>
-          <button className={'tab ' + (mode==='register'?'active':'')} onClick={() => setMode('register')}>Registro</button>
-        </div>
+        <h2>Iniciar sesión</h2>
+        <div className="small">Solo <b>usuario + contraseña</b></div>
       </div>
 
       <form onSubmit={submit}>
@@ -45,11 +38,11 @@ export default function Login({ onAuthed }) {
         {error && <p style={{color:'var(--danger)'}}>{error}</p>}
 
         <div className="row" style={{marginTop:12}}>
-          <button className="btn" disabled={busy}>{busy ? '...' : (mode === 'login' ? 'Entrar' : 'Crear y entrar')}</button>
+          <button className="btn" disabled={busy}>{busy ? '...' : 'Entrar'}</button>
         </div>
 
         <p className="small" style={{marginTop:10}}>
-          Nota: el sistema ya no usa email. Solo <b>usuario + contraseña</b>.
+          El registro público está deshabilitado. Si necesitas cuenta, el <b>ADMIN</b> la crea.
         </p>
       </form>
     </div>

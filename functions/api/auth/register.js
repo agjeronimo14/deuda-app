@@ -4,7 +4,13 @@ import { getUserByUsername } from '../_util/db.js'
 
 export async function onRequestPost(context) {
   const { DB } = context.env
-  if (!DB) return error(500, 'DB binding missing. En Cloudflare Pages → Settings → Bindings crea una D1 con Variable name = DB.')
+  if (!DB) return error(500, 'DB binding missing. Variable name debe ser DB.')
+
+  const countRow = await DB.prepare('SELECT COUNT(*) AS c FROM users').first()
+  const total = Number(countRow?.c || 0)
+  if (total > 0) {
+    return error(403, 'Registro deshabilitado. Pide acceso al ADMIN.')
+  }
 
   let body
   try { body = await context.request.json() } catch { return error(400, 'JSON inválido') }
@@ -15,22 +21,15 @@ export async function onRequestPost(context) {
   if (!username || username.length < 3) return error(400, 'Usuario muy corto (mínimo 3)')
   if (password.length < 6) return error(400, 'Contraseña muy corta (mínimo 6)')
 
-  try {
-    const exists = await getUserByUsername(DB, username)
-    if (exists) return error(409, 'Ese usuario ya existe')
+  const exists = await getUserByUsername(DB, username)
+  if (exists) return error(409, 'Ese usuario ya existe')
 
-    // El esquema actual requiere email NOT NULL. Guardamos un email "interno" para cumplir.
-    const email = `${username}@local`
-    const password_hash = await hashPassword(password)
+  const email = `${username}@local`
+  const password_hash = await hashPassword(password)
 
-    const res = await DB.prepare(
-      'INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)'
-    ).bind(email, username, password_hash).run()
+  const res = await DB.prepare(
+    'INSERT INTO users (email, username, password_hash, role, is_active) VALUES (?, ?, ?, ?, 1)'
+  ).bind(email, username, password_hash, 'admin').run()
 
-    return json({ ok: true, user_id: res.meta.last_row_id })
-  } catch (e) {
-    // DEV: devolvemos el motivo real para diagnosticar (puedes quitarlo después)
-    const msg = (e && e.message) ? e.message : String(e)
-    return error(500, `DB error: ${msg}`)
-  }
+  return json({ ok: true, user_id: res.meta.last_row_id })
 }

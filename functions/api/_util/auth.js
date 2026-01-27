@@ -12,24 +12,50 @@ export async function getSessionUser(context) {
   const sid = cookies.session
   if (!sid) return null
 
-  const sess = await env.DB.prepare(`
-    SELECT s.user_id, s.expires_at, u.email, u.username
-    FROM sessions s
-    JOIN users u ON u.id = s.user_id
-    WHERE s.id = ?
-  `).bind(sid).first()
+  let sess = null
+  try {
+    sess = await env.DB.prepare(`
+      SELECT s.user_id, s.expires_at, u.email, u.username, u.role, u.is_active
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ?
+    `).bind(sid).first()
+  } catch {
+    // compat con DB vieja (sin role/is_active)
+    sess = await env.DB.prepare(`
+      SELECT s.user_id, s.expires_at, u.email, u.username
+      FROM sessions s
+      JOIN users u ON u.id = s.user_id
+      WHERE s.id = ?
+    `).bind(sid).first()
+  }
 
   if (!sess) return null
   if (new Date(sess.expires_at).getTime() <= Date.now()) {
     await env.DB.prepare('DELETE FROM sessions WHERE id=?').bind(sid).run()
     return null
   }
-  return { id: Number(sess.user_id), email: sess.email, username: sess.username }
+
+  return {
+    id: Number(sess.user_id),
+    email: sess.email,
+    username: sess.username,
+    role: sess.role || 'user',
+    is_active: Number(sess.is_active ?? 1) === 1,
+  }
 }
 
 export async function requireUser(context) {
   const user = await getSessionUser(context)
   if (!user) return { user: null, response: error(401, 'No autenticado') }
+  if (!user.is_active) return { user: null, response: error(403, 'Usuario desactivado') }
+  return { user, response: null }
+}
+
+export async function requireAdmin(context) {
+  const { user, response } = await requireUser(context)
+  if (response) return { user: null, response }
+  if ((user.role || 'user') !== 'admin') return { user: null, response: error(403, 'Solo ADMIN') }
   return { user, response: null }
 }
 
