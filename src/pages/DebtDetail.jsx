@@ -11,6 +11,22 @@ function fmtDate(iso) {
   return iso ? String(iso).slice(0,10) : '—'
 }
 
+function dirLabel(direction, viewerIsCounterparty){
+  if(!viewerIsCounterparty){
+    return direction === 'I_OWE' ? 'Yo debo' : 'Me deben'
+  }
+  return direction === 'I_OWE' ? 'Me deben' : 'Yo debo'
+}
+
+function whoOwesLabel(direction, ownerUsername){
+  // solo para contraparte: mostrar quién debe
+  return direction === 'I_OWE' ? `Deudor: ${ownerUsername || '—'}` : `Acreedor: ${ownerUsername || '—'}`
+}
+
+
+  return iso ? String(iso).slice(0,10) : '—'
+}
+
 export default function DebtDetail({ me }) {
   const { id } = useParams()
   const nav = useNavigate()
@@ -130,9 +146,9 @@ export default function DebtDetail({ me }) {
           <h2>{d.title}</h2>
           <p className="small">
             {d.counterparty_name || ''}{' '}
-            {d.direction === 'I_OWE' ? <span className="pill">Yo debo</span> : <span className="pill">Me deben</span>}
+            {(isCounterparty ? <span className="pill">{dirLabel(d.direction, true)}</span> : (d.direction === 'I_OWE' ? <span className="pill">Yo debo</span> : <span className="pill">Me deben</span>))}
             {' '}
-            {isCounterparty && <span className="pill">Deudor: {data.owner_username || '—'}</span>}
+            {isCounterparty && <span className="pill">{whoOwesLabel(d.direction, data.owner_username)}</span>}
             {isAdminAccess && <span className="pill">ADMIN</span>}
           </p>
         </div>
@@ -148,8 +164,16 @@ export default function DebtDetail({ me }) {
       <div className="grid" style={{gap:12}}>
         <div className="card" style={{padding:12}}>
           <h3>Resumen</h3>
-          <p className="small">Principal: <b>{money(d.principal_cents, d.currency)}</b></p>
-          <p className="small">Saldo: <b>{money(data.balance_cents, d.currency)}</b></p>
+          <div className="stats">
+            <div className="stat">
+              <div className="statLabel">Principal</div>
+              <div className="statValue money xl">{money(d.principal_cents, d.currency)}</div>
+            </div>
+            <div className="stat">
+              <div className="statLabel">Saldo</div>
+              <div className="statValue money xl">{money(data.balance_cents, d.currency)}</div>
+            </div>
+          </div>
           <p className="small">Fecha: {d.due_date || '—'}</p>
           <p className="small">Compartida: {share ? '✅' : '—'} · Puede confirmar: {share?.can_confirm ? 'sí' : 'no'}</p>
           {share?.counterparty_username && <p className="small">Usuario contraparte: <b>{share.counterparty_username}</b></p>}
@@ -206,7 +230,7 @@ export default function DebtDetail({ me }) {
           ) : (data.payments || []).map(p => (
             <tr key={p.id}>
               <td className="small">{fmtDate(p.paid_at)}</td>
-              <td><b>{money(p.amount_cents, d.currency)}</b></td>
+              <td><span className="money big">{money(p.amount_cents, d.currency)}</span></td>
               <td>
                 <span className={'pill ' + (p.confirmation_status === 'CONFIRMED' ? 'ok' : (p.confirmation_status === 'REJECTED' ? 'danger' : ''))}>
                   {p.confirmation_status}

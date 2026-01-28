@@ -22,13 +22,19 @@ function useMe() {
     }
   }, [])
 
+  const clear = React.useCallback(() => {
+    setMe(null)
+    setLoading(false)
+  }, [])
+
   React.useEffect(() => { refresh() }, [refresh])
-  return { me, loading, refresh }
+  return { me, loading, refresh, clear }
 }
 
 export default function App() {
-  const { me, loading, refresh } = useMe()
+  const { me, loading, refresh, clear } = useMe()
   const nav = useNavigate()
+  const handlingUnauth = React.useRef(false)
 
   async function logout() {
     try { await api('/api/auth/logout', { method: 'POST' }) } catch {}
@@ -36,17 +42,19 @@ export default function App() {
     nav('/login')
   }
 
-
-React.useEffect(() => {
-  function onUnauth() {
-    // Refresca estado y manda a login
-    refresh().finally(() => {
+  // Si el backend responde 401 en endpoints protegidos, marcamos logout sin loops:
+  React.useEffect(() => {
+    function onUnauth() {
+      if (handlingUnauth.current) return
+      handlingUnauth.current = true
+      clear()
       try { nav('/login') } catch {}
-    })
-  }
-  window.addEventListener('auth:unauthorized', onUnauth)
-  return () => window.removeEventListener('auth:unauthorized', onUnauth)
-}, [refresh, nav])
+      // libera el lock en un tick
+      setTimeout(() => { handlingUnauth.current = false }, 300)
+    }
+    window.addEventListener('auth:unauthorized', onUnauth)
+    return () => window.removeEventListener('auth:unauthorized', onUnauth)
+  }, [clear, nav])
 
   if (loading) {
     return <div className="container"><div className="card"><p>Cargando...</p></div></div>

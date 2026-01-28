@@ -8,9 +8,19 @@ function money(cents, currency='USD') {
   return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
 }
 
+// Etiqueta de dirección según quién está viendo (owner vs contraparte)
+function dirLabel(direction, viewerIsCounterparty){
+  if(!viewerIsCounterparty){
+    return direction === 'I_OWE' ? 'Yo debo' : 'Me deben'
+  }
+  // contraparte: “I_OWE” significa que a TI te deben
+  return direction === 'I_OWE' ? 'Me deben' : 'Yo debo'
+}
+
 export default function Dashboard({ me }) {
   const [data, setData] = React.useState({ owned: [], shared: [] })
-  const [tab, setTab] = React.useState('owned')
+  const isCounterparty = (me?.role === 'counterparty')
+  const [tab, setTab] = React.useState(isCounterparty ? 'shared' : 'owned')
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
   const [open, setOpen] = React.useState(false)
@@ -20,6 +30,8 @@ export default function Dashboard({ me }) {
     try {
       const d = await api('/api/debts')
       setData(d)
+      // si es contraparte, forzamos a “Compartidas conmigo”
+      if (isCounterparty) setTab('shared')
     } catch (e) {
       setError(e.message || 'Error')
     } finally {
@@ -27,10 +39,9 @@ export default function Dashboard({ me }) {
     }
   }
 
-  React.useEffect(() => { load() }, [])
+  React.useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = tab === 'owned' ? data.owned : data.shared
-  const isCounterparty = (me?.role === 'counterparty')
   const canCreateDebt = !!me && !isCounterparty
 
   return (
@@ -56,8 +67,12 @@ export default function Dashboard({ me }) {
         <div className="hr"></div>
 
         <div className="tabs">
-          <button className={'tab ' + (tab==='owned'?'active':'')} onClick={()=>setTab('owned')}>Mis deudas</button>
-          <button className={'tab ' + (tab==='shared'?'active':'')} onClick={()=>setTab('shared')}>Compartidas conmigo</button>
+          {!isCounterparty && (
+            <button className={'tab ' + (tab==='owned'?'active':'')} onClick={()=>setTab('owned')}>Mis deudas</button>
+          )}
+          <button className={'tab ' + (tab==='shared'?'active':'')} onClick={()=>setTab('shared')}>
+            {isCounterparty ? 'Deudas compartidas' : 'Compartidas conmigo'}
+          </button>
         </div>
 
         {error && <p style={{color:'var(--danger)'}}>{error}</p>}
@@ -85,8 +100,8 @@ export default function Dashboard({ me }) {
                         : (d.counterparty_name || '')}
                     </div>
                   </td>
-                  <td><span className="badge">{d.direction === 'I_OWE' ? 'Yo debo' : 'Me deben'}</span></td>
-                  <td><b>{money(d.balance_cents, d.currency)}</b></td>
+                  <td><span className="badge">{dirLabel(d.direction, isCounterparty)}</span></td>
+                  <td><span className="money big">{money(d.balance_cents, d.currency)}</span></td>
                   <td className="small">{d.due_date || '—'}</td>
                   <td><Link className="btn secondary" to={`/debts/${d.id}`}>Abrir</Link></td>
                 </tr>

@@ -68,7 +68,19 @@ export default function Admin({ me }) {
     }catch(e){ setError(e.message || 'Error') }
   }
 
-  async function deleteDebt(id){
+  
+  async function deleteUser(u){
+    if(u.id === me.id) { alert('No puedes eliminar tu propio usuario.'); return }
+    const ok = prompt(`Escribe DELETE para eliminar al usuario "${u.username}" y TODOS sus datos (deudas, abonos, sesiones).`) === 'DELETE'
+    if(!ok) return
+    setError('')
+    try{
+      await api(`/api/admin/users/${u.id}`, { method:'DELETE' })
+      await load()
+    }catch(e){ setError(e.message || 'Error') }
+  }
+
+async function deleteDebt(id){
     if(!confirm('¿Eliminar deuda (y abonos)?')) return
     setError('')
     try{
@@ -175,6 +187,7 @@ export default function Admin({ me }) {
                     <div className="row">
                       <button className="btn secondary" onClick={()=>resetPassword(u.id)}>Reset pass</button>
                       <button className="btn danger" onClick={()=>toggleActive(u)}>{u.is_active ? 'Desactivar' : 'Activar'}</button>
+                      <button className="btn danger" onClick={()=>deleteUser(u)}>Eliminar</button>
                     </div>
                   )}
                 </td>
