@@ -24,9 +24,6 @@ function whoOwesLabel(direction, ownerUsername){
 }
 
 
-  return iso ? String(iso).slice(0,10) : '—'
-}
-
 export default function DebtDetail({ me }) {
   const { id } = useParams()
   const nav = useNavigate()
