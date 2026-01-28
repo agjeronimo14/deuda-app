@@ -1,16 +1,28 @@
 import React from 'react'
 import { api } from '../api.js'
 
-export default function DebtModal({ onClose, onCreated }) {
+export default function DebtModal({ onClose, onCreated, me }) {
   const [title, setTitle] = React.useState('')
   const [counterparty_name, setCounterpartyName] = React.useState('')
+  const [counterparty_username, setCounterpartyUsername] = React.useState('')
   const [direction, setDirection] = React.useState('I_OWE')
   const [principal, setPrincipal] = React.useState('')
   const [date, setDate] = React.useState(() => new Date().toISOString().slice(0,10))
   const [notes, setNotes] = React.useState('')
   const [error, setError] = React.useState('')
   const [busy, setBusy] = React.useState(false)
-  const [created, setCreated] = React.useState(null)
+  const [counterpartyList, setCounterpartyList] = React.useState([])
+
+  React.useEffect(() => {
+    ;(async () => {
+      try {
+        const d = await api('/api/counterparties')
+        setCounterpartyList(d.users || [])
+      } catch {
+        setCounterpartyList([])
+      }
+    })()
+  }, [])
 
   async function submit(e) {
     e.preventDefault()
@@ -20,15 +32,29 @@ export default function DebtModal({ onClose, onCreated }) {
       const dollars = Number(principal)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
       const principal_cents = Math.round(dollars * 100)
-      const resp = await api('/api/debts', { method:'POST', body: { title, counterparty_name, direction, principal_cents, date, notes: notes || null, currency: 'USD' } })
-      setCreated(resp.counterparty ? resp.counterparty : { none: true })
+
+      const body = {
+        title,
+        counterparty_name: counterparty_name || null,
+        counterparty_username: (counterparty_username || '').trim() || null,
+        direction,
+        principal_cents,
+        date,
+        notes: notes || null,
+        currency: 'USD',
+      }
+
+      await api('/api/debts', { method:'POST', body })
       onCreated?.()
+      onClose?.()
     } catch(e) {
       setError(e.message || 'Error')
     } finally {
       setBusy(false)
     }
   }
+
+  const needCounterparty = direction === 'I_OWE'
 
   return (
     <div className="modalBackdrop" onMouseDown={onClose}>
@@ -67,6 +93,23 @@ export default function DebtModal({ onClose, onCreated }) {
             </div>
           </div>
 
+          <label>Usuario de la contraparte {needCounterparty ? '(requerido)' : '(opcional)'}</label>
+          <input
+            className="input"
+            value={counterparty_username}
+            onChange={e=>setCounterpartyUsername(e.target.value)}
+            placeholder="ariana"
+            list="counterpartyUsers"
+            required={needCounterparty}
+          />
+          <datalist id="counterpartyUsers">
+            {counterpartyList.map(u => <option key={u.id} value={u.username} />)}
+          </datalist>
+
+          <p className="small" style={{marginTop:6}}>
+            Regla: si la contraparte <b>no existe</b>, no se crea la deuda. Pídele al <b>ADMIN</b> que cree ese usuario primero.
+          </p>
+
           <label>Notas (opcional)</label>
           <textarea className="input" rows="3" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Detalles, condiciones..." />
 
@@ -76,19 +119,6 @@ export default function DebtModal({ onClose, onCreated }) {
             <button className="btn ok" disabled={busy}>{busy ? '...' : 'Crear'}</button>
             <button className="btn secondary" type="button" onClick={onClose}>Cancelar</button>
           </div>
-
-          <p className="small" style={{marginTop:10}}>
-            Al crear la deuda, el sistema genera un <b>usuario + contraseña</b> para la contraparte (si escribes un nombre).
-          </p>
-
-          {created && created.username && created.temp_password && (
-            <div className="card" style={{padding:12, marginTop:12}}>
-              <p><b>✅ Cuenta creada para la contraparte</b></p>
-              <p className="small">Usuario: <b>{created.username}</b></p>
-              <p className="small">Contraseña: <b>{created.temp_password}</b></p>
-              <p className="small">Envíale estas credenciales para que entre y confirme/rechace abonos.</p>
-            </div>
-          )}
         </form>
       </div>
     </div>

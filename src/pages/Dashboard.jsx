@@ -30,7 +30,8 @@ export default function Dashboard({ me }) {
   React.useEffect(() => { load() }, [])
 
   const list = tab === 'owned' ? data.owned : data.shared
-  const isAdmin = me?.role === 'admin'
+  const isCounterparty = (me?.role === 'counterparty')
+  const canCreateDebt = !!me && !isCounterparty
 
   return (
     <>
@@ -41,14 +42,14 @@ export default function Dashboard({ me }) {
             <p className="small">En “Yo debo”, la contraparte confirma o rechaza los abonos.</p>
           </div>
           <div className="row">
-            {isAdmin && <button className="btn" onClick={() => setOpen(true)}>+ Nueva deuda</button>}
+            {canCreateDebt && <button className="btn" onClick={() => setOpen(true)}>+ Nueva deuda</button>}
             <button className="btn secondary" onClick={load}>Actualizar</button>
           </div>
         </div>
 
-        {!isAdmin && (
+        {isCounterparty && (
           <p className="small" style={{marginTop:10}}>
-            Tu cuenta es de <b>contraparte</b>: solo puedes ver deudas compartidas contigo y confirmar/rechazar abonos.
+            Tu cuenta es de <b>contraparte</b>: puedes ver deudas compartidas contigo y <b>confirmar/rechazar abonos</b>.
           </p>
         )}
 
@@ -76,7 +77,14 @@ export default function Dashboard({ me }) {
                 <tr><td colSpan="5" className="small">No hay registros.</td></tr>
               ) : list.map(d => (
                 <tr key={d.id}>
-                  <td>{d.title}<div className="small">{d.counterparty_name || ''}</div></td>
+                  <td>
+                    {d.title}
+                    <div className="small">
+                      {tab === 'shared'
+                        ? `Deudor: ${d.owner_username || '—'}`
+                        : (d.counterparty_name || '')}
+                    </div>
+                  </td>
                   <td><span className="badge">{d.direction === 'I_OWE' ? 'Yo debo' : 'Me deben'}</span></td>
                   <td><b>{money(d.balance_cents, d.currency)}</b></td>
                   <td className="small">{d.due_date || '—'}</td>
@@ -88,7 +96,7 @@ export default function Dashboard({ me }) {
         )}
       </div>
 
-      {open && <DebtModal onClose={() => setOpen(false)} onCreated={() => { load() }} />}
+      {open && <DebtModal onClose={() => setOpen(false)} onCreated={() => { load() }} me={me} />}
     </>
   )
 }

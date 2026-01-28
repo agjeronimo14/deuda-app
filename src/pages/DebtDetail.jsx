@@ -1,5 +1,5 @@
 import React from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 
 function money(cents, currency='USD') {
@@ -7,209 +7,189 @@ function money(cents, currency='USD') {
   return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
 }
 
-function badge(status){
-  if(status==='CONFIRMED') return <span className="badge ok">CONFIRMED</span>
-  if(status==='PENDING') return <span className="badge warn">PENDING</span>
-  if(status==='REJECTED') return <span className="badge danger">REJECTED</span>
-  return <span className="badge">NONE</span>
-}
-
-async function receiptPNG({ debt, payment, me }) {
-  const w = 900, h = 560
-  const canvas = document.createElement('canvas')
-  canvas.width = w; canvas.height = h
-  const ctx = canvas.getContext('2d')
-
-  // background
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, w, h)
-
-  // header
-  ctx.fillStyle = '#111827'
-  ctx.font = 'bold 32px Arial'
-  ctx.fillText('RECIBO DE ABONO', 40, 60)
-
-  ctx.fillStyle = '#374151'
-  ctx.font = '16px Arial'
-  ctx.fillText('Deuda App', 40, 88)
-
-  // box
-  ctx.strokeStyle = '#e5e7eb'
-  ctx.lineWidth = 2
-  ctx.strokeRect(40, 110, w-80, 360)
-
-  const lines = [
-    ['Deuda', debt.title],
-    ['Contraparte', debt.counterparty_name || '—'],
-    ['Usuario', me?.username || me?.email || '—'],
-    ['Fecha abono', payment.paid_at],
-    ['Monto', money(payment.amount_cents, debt.currency)],
-    ['Estatus', payment.confirmation_status],
-    ['Nota', payment.note || '—'],
-  ]
-
-  let y = 150
-  for (const [k,v] of lines) {
-    ctx.fillStyle = '#111827'
-    ctx.font = 'bold 18px Arial'
-    ctx.fillText(`${k}:`, 60, y)
-
-    ctx.fillStyle = '#111827'
-    ctx.font = '18px Arial'
-    // wrap for note
-    const text = String(v ?? '')
-    if (k === 'Nota' && text.length > 60) {
-      const parts = [text.slice(0,60), text.slice(60,120), text.slice(120)]
-      let yy = y
-      for (const part of parts) {
-        if (!part) continue
-        ctx.fillText(part, 220, yy)
-        yy += 26
-      }
-      y = yy - 26
-    } else {
-      ctx.fillText(text, 220, y)
-    }
-    y += 34
-  }
-
-  // footer
-  ctx.fillStyle = '#6b7280'
-  ctx.font = '14px Arial'
-  ctx.fillText(`Generado: ${new Date().toISOString().slice(0,19).replace('T',' ')}`, 40, 520)
-
-  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
-  const url = URL.createObjectURL(blob)
-
-  // En desktop: descarga. En iPhone: se abre en pestaña para compartir/guardar.
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `recibo-abono-${payment.id}.png`
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(()=>URL.revokeObjectURL(url), 3000)
+function fmtDate(iso) {
+  return iso ? String(iso).slice(0,10) : '—'
 }
 
 export default function DebtDetail({ me }) {
   const { id } = useParams()
-  const [d, setD] = React.useState(null)
+  const nav = useNavigate()
+  const [data, setData] = React.useState(null)
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
-  const [payAmount, setPayAmount] = React.useState('')
-  const [payDate, setPayDate] = React.useState(() => new Date().toISOString().slice(0,10))
-  const [payNote, setPayNote] = React.useState('')
+
+  const [amount, setAmount] = React.useState('')
+  const [paid_at, setPaidAt] = React.useState(() => new Date().toISOString().slice(0,10))
+  const [note, setNote] = React.useState('')
 
   async function load() {
     setLoading(true); setError('')
     try {
-      const data = await api(`/api/debts/${id}`)
-      setD(data)
-    } catch(e) {
+      const d = await api(`/api/debts/${id}`)
+      setData(d)
+    } catch (e) {
       setError(e.message || 'Error')
     } finally {
       setLoading(false)
     }
   }
+
   React.useEffect(() => { load() }, [id])
 
-  async function addPayment() {
+  async function addPayment(e) {
+    e.preventDefault()
     setError('')
     try {
-      const dollars = Number(payAmount)
+      const dollars = Number(amount)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
       const amount_cents = Math.round(dollars * 100)
-      await api(`/api/debts/${id}/payments`, { method:'POST', body: { amount_cents, paid_at: payDate, note: payNote }})
-      setPayAmount(''); setPayNote('')
+      await api(`/api/debts/${id}/payments`, { method:'POST', body:{ amount_cents, paid_at, note: note || null } })
+      setAmount(''); setNote('')
       await load()
-    } catch(e) { setError(e.message || 'Error') }
+    } catch(e) {
+      setError(e.message || 'Error')
+    }
   }
 
-  async function confirm(paymentId) {
+  async function confirmPayment(pid, ok) {
     setError('')
     try {
-      await api(`/api/payments/${paymentId}/confirm`, { method:'POST', body: { note: '' }})
+      await api(`/api/payments/${pid}/${ok ? 'confirm' : 'reject'}`, { method:'POST', body:{} })
       await load()
-    } catch(e) { setError(e.message || 'Error') }
+    } catch(e) {
+      setError(e.message || 'Error')
+    }
   }
 
-  async function reject(paymentId) {
-    const note = prompt('Motivo (opcional):') || ''
+  async function deletePayment(pid) {
+    if(!confirm('¿Eliminar este abono?')) return
     setError('')
-    try {
-      await api(`/api/payments/${paymentId}/reject`, { method:'POST', body: { note }})
+    try{
+      await api(`/api/payments/${pid}`, { method:'DELETE' })
       await load()
-    } catch(e) { setError(e.message || 'Error') }
+    }catch(e){ setError(e.message || 'Error') }
+  }
+
+  async function deleteDebt() {
+    if(!confirm('¿Eliminar esta deuda (y todos sus abonos)?')) return
+    setError('')
+    try{
+      await api(`/api/debts/${id}`, { method:'DELETE' })
+      nav('/')
+    }catch(e){ setError(e.message || 'Error') }
+  }
+
+  async function editDebt() {
+    const d = data?.debt
+    if (!d) return
+    const title = prompt('Título', d.title || '') ?? null
+    if (title === null) return
+    const counterparty_name = prompt('Contraparte (nombre)', d.counterparty_name || '') ?? null
+    if (counterparty_name === null) return
+    const due_date = prompt('Fecha (YYYY-MM-DD)', d.due_date || '') ?? null
+    if (due_date === null) return
+    const notes = prompt('Notas (opcional)', d.notes || '') ?? null
+    if (notes === null) return
+
+    // opcional: cambiar contraparte por username
+    const currentCp = data?.share?.counterparty_username || ''
+    const counterparty_username = prompt('Usuario de la contraparte (vacío para quitar vínculo)', currentCp) 
+    if (counterparty_username === null) return
+
+    setError('')
+    try{
+      await api(`/api/debts/${id}`, { method:'PUT', body:{
+        title: title.trim(),
+        counterparty_name: counterparty_name.trim() || null,
+        due_date: due_date.trim() || null,
+        notes: notes.trim() || null,
+        counterparty_username: counterparty_username.trim() || null,
+      }})
+      await load()
+    }catch(e){ setError(e.message || 'Error') }
   }
 
   if (loading) return <div className="card"><p>Cargando...</p></div>
-  if (error) return <div className="card"><p style={{color:'var(--danger)'}}>{error}</p><button className="btn secondary" onClick={load}>Reintentar</button></div>
-  if (!d) return null
+  if (error) return <div className="card"><p style={{color:'var(--danger)'}}>{error}</p><Link className="btn secondary" to="/">Volver</Link></div>
+  if (!data) return null
 
-  const isOwner = d.access === 'OWNER'
-  const isCounterparty = d.access === 'COUNTERPARTY'
+  const d = data.debt
+  const share = data.share
+  const access = data.access
+  const isOwner = access === 'OWNER'
+  const isAdminAccess = access === 'ADMIN'
+  const isCounterparty = access === 'COUNTERPARTY'
+  const canEdit = isOwner || isAdminAccess
+  const canAddPayments = isOwner || isAdminAccess
+  const canConfirm = isCounterparty && d.direction === 'I_OWE' && share?.can_confirm
 
   return (
     <div className="card">
       <div className="split">
         <div>
-          <h2>{d.debt.title}</h2>
-          <p className="small">{d.debt.counterparty_name || ''}</p>
+          <h2>{d.title}</h2>
+          <p className="small">
+            {d.counterparty_name || ''}{' '}
+            {d.direction === 'I_OWE' ? <span className="pill">Yo debo</span> : <span className="pill">Me deben</span>}
+            {' '}
+            {isCounterparty && <span className="pill">Deudor: {data.owner_username || '—'}</span>}
+            {isAdminAccess && <span className="pill">ADMIN</span>}
+          </p>
         </div>
         <div className="row">
-          <span className="badge">{d.debt.direction === 'I_OWE' ? 'Yo debo' : 'Me deben'}</span>
-          <span className="badge">{d.debt.status}</span>
+          <Link className="btn secondary" to="/">Volver</Link>
+          {canEdit && <button className="btn secondary" onClick={editDebt}>Editar</button>}
+          {canEdit && <button className="btn danger" onClick={deleteDebt}>Eliminar</button>}
         </div>
       </div>
 
       <div className="hr"></div>
 
-      <div className="grid">
+      <div className="grid" style={{gap:12}}>
         <div className="card" style={{padding:12}}>
-          <h2>Resumen</h2>
-          <p><b>Principal:</b> {money(d.debt.principal_cents, d.debt.currency)}</p>
-          <p><b>Saldo:</b> {money(d.balance_cents, d.debt.currency)}</p>
-          <p><b>Fecha:</b> <span className="small">{d.debt.due_date || '—'}</span></p>
-
-          {d.share && (
-            <p className="small">
-              Contraparte user: <b>{d.share.counterparty_username || '—'}</b> · Puede confirmar: {d.share.can_confirm ? 'sí' : 'no'}
-            </p>
-          )}
-
-          <p className="small" style={{marginTop:8}}>
-            Nota: ya no se usan tokens. La contraparte entra con <b>usuario + contraseña</b>.
-          </p>
+          <h3>Resumen</h3>
+          <p className="small">Principal: <b>{money(d.principal_cents, d.currency)}</b></p>
+          <p className="small">Saldo: <b>{money(data.balance_cents, d.currency)}</b></p>
+          <p className="small">Fecha: {d.due_date || '—'}</p>
+          <p className="small">Compartida: {share ? '✅' : '—'} · Puede confirmar: {share?.can_confirm ? 'sí' : 'no'}</p>
+          {share?.counterparty_username && <p className="small">Usuario contraparte: <b>{share.counterparty_username}</b></p>}
         </div>
 
-        {isOwner && (
+        {canAddPayments && (
           <div className="card" style={{padding:12}}>
-            <h2>Registrar abono</h2>
-            <label>Monto (USD)</label>
-            <input className="input" value={payAmount} onChange={e=>setPayAmount(e.target.value)} placeholder="25.00" />
-            <div className="grid">
-              <div>
-                <label>Fecha</label>
-                <input className="input" type="date" value={payDate} onChange={e=>setPayDate(e.target.value)} />
+            <h3>Registrar abono</h3>
+            <form onSubmit={addPayment}>
+              <label>Monto (USD)</label>
+              <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+              <div className="grid">
+                <div>
+                  <label>Fecha</label>
+                  <input className="input" type="date" value={paid_at} onChange={e=>setPaidAt(e.target.value)} />
+                </div>
+                <div>
+                  <label>Nota (opcional)</label>
+                  <input className="input" value={note} onChange={e=>setNote(e.target.value)} placeholder="Transferencia, efectivo..." />
+                </div>
               </div>
-              <div>
-                <label>Nota (opcional)</label>
-                <input className="input" value={payNote} onChange={e=>setPayNote(e.target.value)} placeholder="Transferencia, efectivo..." />
-              </div>
-            </div>
-            <div className="row" style={{marginTop:10}}>
-              <button className="btn ok" onClick={addPayment}>Guardar abono</button>
-            </div>
-            <p className="small">
-              Si esta deuda es <b>Yo debo</b>, el abono queda <b>PENDING</b> hasta que la contraparte lo confirme (si tiene cuenta creada).
-            </p>
+              <button className="btn ok" type="submit" style={{marginTop:10}}>Guardar abono</button>
+              <p className="small" style={{marginTop:10}}>
+                Si esta deuda es <b>Yo debo</b> y hay contraparte asignada, el abono queda en <b>PENDING</b> hasta que confirme.
+              </p>
+            </form>
+          </div>
+        )}
+
+        {!canAddPayments && (
+          <div className="card" style={{padding:12}}>
+            <h3>Permisos</h3>
+            <p className="small">Eres contraparte: puedes <b>confirmar/rechazar</b> abonos pendientes, pero no puedes registrar abonos ni editar la deuda.</p>
           </div>
         )}
       </div>
 
       <div className="hr"></div>
 
-      <h2>Abonos</h2>
+      <h3>Abonos</h3>
       <table className="table">
         <thead>
           <tr>
@@ -221,23 +201,32 @@ export default function DebtDetail({ me }) {
           </tr>
         </thead>
         <tbody>
-          {d.payments.length === 0 ? (
+          {(data.payments || []).length === 0 ? (
             <tr><td colSpan="5" className="small">No hay abonos.</td></tr>
-          ) : d.payments.map(p => (
+          ) : (data.payments || []).map(p => (
             <tr key={p.id}>
-              <td className="small">{p.paid_at}</td>
-              <td><b>{money(p.amount_cents, d.debt.currency)}</b></td>
-              <td>{badge(p.confirmation_status)}</td>
+              <td className="small">{fmtDate(p.paid_at)}</td>
+              <td><b>{money(p.amount_cents, d.currency)}</b></td>
+              <td>
+                <span className={'pill ' + (p.confirmation_status === 'CONFIRMED' ? 'ok' : (p.confirmation_status === 'REJECTED' ? 'danger' : ''))}>
+                  {p.confirmation_status}
+                </span>
+              </td>
               <td className="small">{p.note || ''}</td>
               <td>
                 <div className="row">
-                  <button className="btn secondary" onClick={()=>receiptPNG({ debt:d.debt, payment:p, me })}>Recibo PNG</button>
-                  {isCounterparty && p.confirmation_status === 'PENDING' ? (
+                  <button className="btn secondary" onClick={() => receiptPng({ debt:d, payment:p, owner_username: data.owner_username || (me?.username||''), counterparty_name: d.counterparty_name })}>
+                    Imprimir PNG
+                  </button>
+                  {canConfirm && p.confirmation_status === 'PENDING' && (
                     <>
-                      <button className="btn ok" onClick={() => confirm(p.id)}>Confirmar</button>
-                      <button className="btn danger" onClick={() => reject(p.id)}>Rechazar</button>
+                      <button className="btn ok" onClick={()=>confirmPayment(p.id, true)}>Confirmar</button>
+                      <button className="btn danger" onClick={()=>confirmPayment(p.id, false)}>Rechazar</button>
                     </>
-                  ) : null}
+                  )}
+                  {(canEdit) && (
+                    <button className="btn danger" onClick={()=>deletePayment(p.id)}>Eliminar</button>
+                  )}
                 </div>
               </td>
             </tr>
@@ -245,11 +234,100 @@ export default function DebtDetail({ me }) {
         </tbody>
       </table>
 
-      {!isOwner && (
-        <p className="small" style={{marginTop:10}}>
-          Vista de contraparte: aquí solo puedes confirmar/rechazar abonos PENDING.
-        </p>
-      )}
+      {error && <p style={{color:'var(--danger)'}}>{error}</p>}
     </div>
   )
+}
+
+// genera un recibo simple en PNG (client-side)
+async function receiptPng({ debt, payment, owner_username, counterparty_name }) {
+  const canvas = document.createElement('canvas')
+  const w = 900, h = 520
+  canvas.width = w; canvas.height = h
+  const ctx = canvas.getContext('2d')
+
+  // background
+  ctx.fillStyle = '#0b1220'
+  ctx.fillRect(0,0,w,h)
+
+  // card
+  const pad = 40
+  ctx.fillStyle = '#0f1a30'
+  roundRect(ctx, pad, pad, w-2*pad, h-2*pad, 18, true, false)
+
+  ctx.fillStyle = '#e8eefc'
+  ctx.font = 'bold 34px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText('Recibo de abono', pad+30, pad+70)
+
+  ctx.font = '16px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillStyle = '#9fb3d6'
+  ctx.fillText('Deuda:', pad+30, pad+120)
+  ctx.fillText('Deudor:', pad+30, pad+155)
+  ctx.fillText('Contraparte:', pad+30, pad+190)
+  ctx.fillText('Fecha:', pad+30, pad+225)
+  ctx.fillText('Monto:', pad+30, pad+260)
+  ctx.fillText('Estado:', pad+30, pad+295)
+  ctx.fillText('Nota:', pad+30, pad+330)
+
+  ctx.fillStyle = '#e8eefc'
+  ctx.font = 'bold 18px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText(debt.title || '', pad+160, pad+120)
+  ctx.fillText(owner_username || '', pad+160, pad+155)
+  ctx.fillText(counterparty_name || '', pad+160, pad+190)
+  ctx.fillText(String(payment.paid_at || '').slice(0,10), pad+160, pad+225)
+
+  const value = (payment.amount_cents || 0) / 100
+  ctx.fillText(new Intl.NumberFormat('en-US', { style:'currency', currency: debt.currency || 'USD' }).format(value), pad+160, pad+260)
+
+  ctx.fillText(payment.confirmation_status || '—', pad+160, pad+295)
+
+  ctx.font = '16px system-ui, -apple-system, Segoe UI, Roboto'
+  wrapText(ctx, payment.note || '', pad+160, pad+330, w-2*pad-190, 20)
+
+  // footer
+  ctx.fillStyle = '#9fb3d6'
+  ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText(`Generado: ${new Date().toISOString().slice(0,19).replace('T',' ')}`, pad+30, h-pad-18)
+
+  const url = canvas.toDataURL('image/png')
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `recibo_${debt.id}_${payment.id}.png`
+  a.click()
+}
+
+function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+  if (typeof radius === 'number') radius = {tl:radius,tr:radius,br:radius,bl:radius}
+  ctx.beginPath()
+  ctx.moveTo(x + radius.tl, y)
+  ctx.lineTo(x + width - radius.tr, y)
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr)
+  ctx.lineTo(x + width, y + height - radius.br)
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height)
+  ctx.lineTo(x + radius.bl, y + height)
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl)
+  ctx.lineTo(x, y + radius.tl)
+  ctx.quadraticCurveTo(x, y, x + radius.tl, y)
+  ctx.closePath()
+  if (fill) ctx.fill()
+  if (stroke) ctx.stroke()
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = String(text || '').split(' ')
+  let line = ''
+  let yy = y
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n] + ' '
+    const metrics = ctx.measureText(testLine)
+    const testWidth = metrics.width
+    if (testWidth > maxWidth && n > 0) {
+      ctx.fillText(line, x, yy)
+      line = words[n] + ' '
+      yy += lineHeight
+    } else {
+      line = testLine
+    }
+  }
+  ctx.fillText(line, x, yy)
 }

@@ -53,7 +53,7 @@ export default function App() {
           {me?.role === 'admin' && <Link className="btn secondary" to="/admin">Admin</Link>}
           {me ? (
             <>
-              <span className="pill">👤 {me.username || me.email} {me.role === 'admin' ? '· ADMIN' : ''}</span>
+              <span className="pill">👤 {me.username} {me.role === 'admin' ? '· ADMIN' : ''}</span>
               <button className="btn secondary" onClick={logout}>Salir</button>
             </>
           ) : (

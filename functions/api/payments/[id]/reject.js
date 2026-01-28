@@ -9,29 +9,39 @@ export async function onRequestPost(context) {
   const paymentId = Number(context.params.id)
   if (!Number.isFinite(paymentId)) return error(400, 'ID inválido')
 
-  let body
-  try { body = await context.request.json() } catch { body = {} }
-  const note = body.note ? String(body.note).trim() : null
-
   const { DB } = context.env
-  const p = await DB.prepare(`
-    SELECT p.id, p.debt_id, p.confirmation_status, d.direction, s.counterparty_user_id
-    FROM payments p
-    JOIN debts d ON d.id = p.debt_id
-    LEFT JOIN debt_shares s ON s.debt_id = d.id
-    WHERE p.id = ?
-  `).bind(paymentId).first()
 
+  const p = await DB.prepare('SELECT * FROM payments WHERE id=?').bind(paymentId).first()
   if (!p) return error(404, 'No existe')
+
+  const debt = await DB.prepare('SELECT * FROM debts WHERE id=?').bind(p.debt_id).first()
+  if (!debt) return error(404, 'Deuda no existe')
+
+  const isAdmin = (user.role || 'user') === 'admin'
+
+  const share = await DB.prepare('SELECT * FROM debt_shares WHERE debt_id=?').bind(p.debt_id).first()
+
+  // Solo aplica confirmación si la deuda es "Yo debo"
+  if (debt.direction !== 'I_OWE') return error(400, 'No requiere confirmación')
+
+  // ADMIN puede forzar; si no, solo la contraparte asignada
+  if (!isAdmin) {
+    if (!share) return error(403, 'Sin contraparte')
+    if (Number(share.counterparty_user_id) !== Number(user.id)) return error(403, 'No eres la contraparte')
+    if (Number(share.can_confirm) !== 1) return error(403, 'No tienes permiso de confirmar')
+    if (!share.accepted_at) return error(403, 'No está activa')
+  }
+
+  // Solo pendientes pueden cambiar
   if (p.confirmation_status !== 'PENDING') return error(400, 'Este abono no está pendiente')
-  if (p.direction === 'I_OWE' && Number(p.counterparty_user_id) !== Number(user.id)) return error(403, 'Solo la contraparte puede rechazar')
 
   await DB.prepare(`
     UPDATE payments
-    SET confirmation_status='REJECTED', confirmed_by_user_id=?, confirmed_at=datetime('now'), confirmation_note=?
-    WHERE id=?
-  `).bind(user.id, note, paymentId).run()
+    SET confirmation_status = ?, confirmed_at = datetime('now')
+    WHERE id = ?
+  `).bind('REJECTED', paymentId).run()
 
   await updateDebtStatusIfPaid(DB, Number(p.debt_id))
+
   return json({ ok: true })
 }

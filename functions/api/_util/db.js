@@ -18,7 +18,7 @@ export async function computeBalanceCents(DB, debtId) {
   const row = await DB.prepare(`
     SELECT d.principal_cents - COALESCE((
       SELECT SUM(amount_cents) FROM payments
-      WHERE debt_id = ? AND confirmation_status != 'REJECTED'
+      WHERE debt_id = ? AND confirmation_status = 'CONFIRMED'
     ), 0) AS balance_cents
     FROM debts d
     WHERE d.id = ?

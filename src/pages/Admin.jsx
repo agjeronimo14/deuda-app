@@ -1,21 +1,32 @@
 import React from 'react'
 import { api } from '../api.js'
+import { Link } from 'react-router-dom'
+
+function money(cents, currency='USD') {
+  const value = (cents || 0) / 100
+  return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
+}
 
 export default function Admin({ me }) {
   const [users, setUsers] = React.useState([])
+  const [debts, setDebts] = React.useState([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState('')
 
   const [newUsername, setNewUsername] = React.useState('')
-  const [newRole, setNewRole] = React.useState('counterparty')
+  const [newRole, setNewRole] = React.useState('user')
   const [newPassword, setNewPassword] = React.useState('')
   const [createdCreds, setCreatedCreds] = React.useState(null)
+
+  const [q, setQ] = React.useState('')
 
   async function load() {
     setLoading(true); setError('')
     try {
-      const d = await api('/api/admin/users')
-      setUsers(d.users || [])
+      const u = await api('/api/admin/users')
+      setUsers(u.users || [])
+      const d = await api('/api/admin/debts')
+      setDebts(d.debts || [])
     } catch (e) {
       setError(e.message || 'Error')
     } finally {
@@ -57,16 +68,40 @@ export default function Admin({ me }) {
     }catch(e){ setError(e.message || 'Error') }
   }
 
+  async function deleteDebt(id){
+    if(!confirm('¿Eliminar deuda (y abonos)?')) return
+    setError('')
+    try{
+      await api(`/api/debts/${id}`, { method:'DELETE' })
+      await load()
+    }catch(e){ setError(e.message || 'Error') }
+  }
+
+  async function cleanup(scope){
+    const ok = prompt(`Escribe DELETE para limpiar: ${scope}`) === 'DELETE'
+    if(!ok) return
+    setError('')
+    try{
+      await api('/api/admin/cleanup', { method:'POST', body:{ confirm:'DELETE', scope } })
+      await load()
+    }catch(e){ setError(e.message || 'Error') }
+  }
+
   if (!me || me.role !== 'admin') {
     return <div className="card"><p style={{color:'var(--danger)'}}>Solo ADMIN.</p></div>
   }
+
+  const filteredDebts = debts.filter(d => {
+    const s = `${d.id} ${d.title} ${d.owner_username} ${d.counterparty_username||''} ${d.direction}`.toLowerCase()
+    return s.includes(q.toLowerCase())
+  })
 
   return (
     <div className="card">
       <div className="split">
         <div>
           <h2>Panel ADMIN</h2>
-          <p className="small">Gestiona usuarios. El registro público está deshabilitado.</p>
+          <p className="small">El registro público está deshabilitado: SOLO ADMIN crea usuarios.</p>
         </div>
         <button className="btn secondary" onClick={load}>Actualizar</button>
       </div>
@@ -79,13 +114,13 @@ export default function Admin({ me }) {
       <form onSubmit={createUser} className="grid" style={{gap:12}}>
         <div>
           <label>Usuario</label>
-          <input className="input" value={newUsername} onChange={e=>setNewUsername(e.target.value)} placeholder="ariana" required />
+          <input className="input" value={newUsername} onChange={e=>setNewUsername(e.target.value)} placeholder="alex" required />
         </div>
         <div>
           <label>Rol</label>
           <select className="input" value={newRole} onChange={e=>setNewRole(e.target.value)}>
-            <option value="counterparty">counterparty</option>
             <option value="user">user</option>
+            <option value="counterparty">counterparty</option>
             <option value="admin">admin</option>
           </select>
         </div>
@@ -146,6 +181,66 @@ export default function Admin({ me }) {
           </tbody>
         </table>
       )}
+
+      <div className="hr"></div>
+
+      <div className="split">
+        <div>
+          <h2>Deudas (global)</h2>
+          <p className="small">Puedes abrir, editar o eliminar.</p>
+        </div>
+        <div className="row">
+          <input className="input" style={{width:220}} value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar..." />
+        </div>
+      </div>
+
+      <table className="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Título</th>
+            <th>Owner</th>
+            <th>Contraparte</th>
+            <th>Saldo</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredDebts.length === 0 ? (
+            <tr><td colSpan="7" className="small">No hay deudas.</td></tr>
+          ) : filteredDebts.map(d => (
+            <tr key={d.id}>
+              <td className="small">{d.id}</td>
+              <td>
+                <b>{d.title}</b>
+                <div className="small">{d.direction === 'I_OWE' ? 'Yo debo' : 'Me deben'}</div>
+              </td>
+              <td className="small">{d.owner_username}</td>
+              <td className="small">{d.counterparty_username || '—'}</td>
+              <td><b>{money(d.balance_cents, d.currency)}</b></td>
+              <td className="small">{d.due_date || '—'}</td>
+              <td>
+                <div className="row">
+                  <Link className="btn secondary" to={`/debts/${d.id}`}>Abrir</Link>
+                  <button className="btn danger" onClick={()=>deleteDebt(d.id)}>Eliminar</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="hr"></div>
+
+      <h2>Limpieza (peligroso)</h2>
+      <p className="small">Esto borra datos para “resetear” la DB. Se te pedirá escribir DELETE.</p>
+      <div className="row">
+        <button className="btn danger" onClick={()=>cleanup('SESSIONS')}>Borrar sesiones</button>
+        <button className="btn danger" onClick={()=>cleanup('PAYMENTS')}>Borrar abonos</button>
+        <button className="btn danger" onClick={()=>cleanup('DEBTS')}>Borrar deudas+abonos</button>
+        <button className="btn danger" onClick={()=>cleanup('ALL')}>Borrar TODO (excepto users)</button>
+      </div>
     </div>
   )
 }
