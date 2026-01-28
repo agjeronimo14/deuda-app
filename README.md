@@ -76,3 +76,8 @@ En producción:
 - Output dir: `dist`
 - Variables:
   - Binding D1: `DB` → tu D1
+
+
+## Nota (Cloudflare Pages)
+- En `wrangler.toml` solo se define `pages_build_output_dir`.
+- El comando de build (`npm run build`) se configura en Cloudflare Pages (Build settings) o se detecta automáticamente.

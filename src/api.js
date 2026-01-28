@@ -1,3 +1,6 @@
+let lastUnauthAt = 0
+const UNAUTH_DEBOUNCE_MS = 1500
+
 export async function api(path, { method = 'GET', body } = {}) {
   const res = await fetch(path, {
     method,
@@ -6,9 +9,17 @@ export async function api(path, { method = 'GET', body } = {}) {
     credentials: 'include',
   })
 
-  // Si el backend responde 401, disparo un evento global para forzar re-login
-  if (res.status === 401) {
-    try { window.dispatchEvent(new CustomEvent('auth:unauthorized')) } catch {}
+  // Importante:
+  // - NO disparamos "auth:unauthorized" en endpoints de auth (/api/auth/*) para evitar loops
+  //   (ej: /api/auth/me devuelve 401 cuando no hay sesión)
+  // - Debounce para evitar tormenta de eventos.
+  const isAuthEndpoint = String(path || '').startsWith('/api/auth/')
+  if (res.status === 401 && !isAuthEndpoint) {
+    const now = Date.now()
+    if (now - lastUnauthAt > UNAUTH_DEBOUNCE_MS) {
+      lastUnauthAt = now
+      try { window.dispatchEvent(new CustomEvent('auth:unauthorized')) } catch {}
+    }
   }
 
   const text = await res.text()
@@ -17,7 +28,6 @@ export async function api(path, { method = 'GET', body } = {}) {
   try {
     data = text ? JSON.parse(text) : null
   } catch {
-    // El server devolvió HTML (ej: error 500). Evitamos el "Unexpected token <"
     throw new Error('Respuesta no-JSON del server (posible error 500). Revisa Cloudflare Pages → Functions logs.')
   }
 
