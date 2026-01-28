@@ -36,6 +36,18 @@ export default function App() {
     nav('/login')
   }
 
+
+React.useEffect(() => {
+  function onUnauth() {
+    // Refresca estado y manda a login
+    refresh().finally(() => {
+      try { nav('/login') } catch {}
+    })
+  }
+  window.addEventListener('auth:unauthorized', onUnauth)
+  return () => window.removeEventListener('auth:unauthorized', onUnauth)
+}, [refresh, nav])
+
   if (loading) {
     return <div className="container"><div className="card"><p>Cargando...</p></div></div>
   }

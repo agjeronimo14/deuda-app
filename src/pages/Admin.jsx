@@ -101,7 +101,9 @@ export default function Admin({ me }) {
       <div className="split">
         <div>
           <h2>Panel ADMIN</h2>
-          <p className="small">El registro público está deshabilitado: SOLO ADMIN crea usuarios.</p>
+          <p className="small">El registro público está deshabilitado: SOLO ADMIN crea usuarios.
+
+⚠️ Nota: si usas 'limpieza' y borras SESSIONS/ALL, te va a cerrar sesión a ti y a todos.</p>
         </div>
         <button className="btn secondary" onClick={load}>Actualizar</button>
       </div>

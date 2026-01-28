@@ -1,5 +1,5 @@
 import { json, error } from '../_util/response.js'
-import { requireAdmin } from '../_util/auth.js'
+import { requireAdmin, clearSession } from '../_util/auth.js'
 
 export async function onRequestPost(context) {
   const { response } = await requireAdmin(context)
@@ -16,7 +16,8 @@ export async function onRequestPost(context) {
 
   if (scope === 'SESSIONS') {
     await DB.prepare('DELETE FROM sessions').run()
-    return json({ ok: true, scope })
+    const cookie = await clearSession(context)
+    return json({ ok: true, scope, logged_out: true }, { headers: { 'Set-Cookie': cookie } })
   }
 
   if (scope === 'PAYMENTS') {
@@ -37,7 +38,8 @@ export async function onRequestPost(context) {
     await DB.prepare('DELETE FROM debt_shares').run()
     await DB.prepare('DELETE FROM debts').run()
     await DB.prepare('DELETE FROM sessions').run()
-    return json({ ok: true, scope })
+    const cookie = await clearSession(context)
+    return json({ ok: true, scope, logged_out: true }, { headers: { 'Set-Cookie': cookie } })
   }
 
   return error(400, 'Scope inválido. Usa DEBTS, PAYMENTS, SESSIONS o ALL.')

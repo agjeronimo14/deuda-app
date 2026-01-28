@@ -6,6 +6,11 @@ export async function api(path, { method = 'GET', body } = {}) {
     credentials: 'include',
   })
 
+  // Si el backend responde 401, disparo un evento global para forzar re-login
+  if (res.status === 401) {
+    try { window.dispatchEvent(new CustomEvent('auth:unauthorized')) } catch {}
+  }
+
   const text = await res.text()
 
   let data = null

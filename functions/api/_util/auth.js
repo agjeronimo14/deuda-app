@@ -40,7 +40,7 @@ export async function getSessionUser(context) {
     id: Number(sess.user_id),
     email: sess.email,
     username: sess.username,
-    role: sess.role || 'user',
+    role: String(sess.role || 'user').toLowerCase(),
     is_active: Number(sess.is_active ?? 1) === 1,
   }
 }
