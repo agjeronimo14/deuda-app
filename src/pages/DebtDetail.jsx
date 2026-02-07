@@ -395,9 +395,20 @@ async function addPayment(e) {
                 <span className="money big">{money(p.amount_cents, d.currency)}</span>
                 {p.kind === 'CHARGE' && <div className="small" style={{marginTop:4}}>Tipo: <b>AUMENTO</b></div>}
                 {p.kind !== 'CHARGE' && <div className="small" style={{marginTop:4}}>Tipo: <b>ABONO</b></div>}
-                {p.eur_equiv_cents != null && <div className="small">EUR: €{(Number(p.eur_equiv_cents)/100).toFixed(2)}</div>}
-                {p.btc_paid_sats != null && (
-                  <div className="small">BTC: {(Number(p.btc_paid_sats)/100000000).toFixed(8)}{p.btc_rate_usd_at_payment != null ? (' · tasa: $' + Number(p.btc_rate_usd_at_payment).toFixed(2)) : ''}</div>
+                {/* Mostrar valores manuales (EUR/BTC) de forma bien visible */}
+                {(p.eur_equiv_cents != null || p.btc_paid_sats != null) && (
+                  <div className="row" style={{gap:8, flexWrap:'wrap', marginTop:8}}>
+                    {p.eur_equiv_cents != null && (
+                      <span className="pill">EUR €{(Number(p.eur_equiv_cents)/100).toFixed(2)}</span>
+                    )}
+                    {p.btc_paid_sats != null && (
+                      <span className="pill">
+                        BTC {(Number(p.btc_paid_sats)/100000000).toFixed(8)}
+                        {p.btc_rate_usd_at_payment != null ? ` · $${Number(p.btc_rate_usd_at_payment).toFixed(2)}` : ''}
+                        {p.btc_rate_eur_at_payment != null ? ` · €${Number(p.btc_rate_eur_at_payment).toFixed(2)}` : ''}
+                      </span>
+                    )}
+                  </div>
                 )}
               </td>
               <td>
