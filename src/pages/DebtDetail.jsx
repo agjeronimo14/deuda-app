@@ -121,6 +121,7 @@ async function addPayment(e) {
         }
       })
       setBtcAmount(''); setAmount(''); setEurManual(''); setNote('')
+      
     } else {
       const dollars = Number(amount)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
@@ -131,11 +132,13 @@ async function addPayment(e) {
           kind,
           amount_cents,
           eur_equiv_cents,
+          btc_paid_sats: btcToSats(btcAmount) || null,
           paid_at,
           note: note || null
         }
       })
-      setAmount(''); setEurManual(''); setNote('')
+      setAmount(''); setBtcAmount(''); setEurManual(''); setNote('')
+      
     }
     await load()
   } catch(e) {
@@ -301,6 +304,13 @@ async function addPayment(e) {
                           <label>EUR (opcional)</label>
                           <input className="input" value={eurManual} onChange={e=>setEurManual(e.target.value)} placeholder="22.00" />
                         </div>
+
+{!(d?.amount_mode==='btc_anchored_usd' && payMode==='btc') && (
+                        <div>
+                          <label>BTC (opcional)</label>
+                          <input className="input" value={btcAmount} onChange={e=>setBtcAmount(e.target.value)} placeholder="0.00000000" inputMode="decimal" />
+                        </div>
+                      )}
                       </div>
 
                       {btcPreviewUsd() && (
@@ -323,6 +333,11 @@ async function addPayment(e) {
                           <label>EUR (opcional)</label>
                           <input className="input" value={eurManual} onChange={e=>setEurManual(e.target.value)} placeholder="22.00" />
                         </div>
+
+<div>
+  <label>{(d?.amount_mode==='btc_anchored_usd' && payMode==='btc') ? 'BTC (requerido)' : 'BTC (opcional)'}</label>
+  <input className="input" value={btcAmount} onChange={e=>setBtcAmount(e.target.value)} placeholder="0.00000000" inputMode="decimal" />
+</div>
                       </div>
                     </>
                   )}
