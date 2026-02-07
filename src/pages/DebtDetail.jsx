@@ -59,10 +59,27 @@ export default function DebtDetail({ me }) {
   }
 }
 
+function toNumberLoose(v){
+  if (v == null) return NaN
+  let s = String(v).trim()
+  if (!s) return NaN
+  // quita espacios comunes
+  s = s.split(' ').join('')
+  // Soporta coma decimal ("0,001") y también miles ("1,234.56")
+  if (s.includes(',') && s.includes('.')) {
+    // asume que la coma es separador de miles
+    s = s.split(',').join('')
+  } else if (s.includes(',') && !s.includes('.')) {
+    // coma decimal
+    s = s.split(',').join('.')
+  }
+  return Number(s)
+}
+
 function btcToSats(str) {
-  const v = Number(String(str || '').trim())
-  if (!Number.isFinite(v) || v <= 0) return null
-  return Math.round(v * 100000000)
+  const x = toNumberLoose(str)
+  if (!Number.isFinite(x) || x <= 0) return null
+  return Math.round(x * 100000000)
 }
 
 function btcPreviewUsd() {
@@ -92,7 +109,7 @@ async function addPayment(e) {
     // EUR manual (opcional)
     let eur_equiv_cents = null
     if (eurManual && String(eurManual).trim() !== '') {
-      const eurVal = Number(eurManual)
+      const eurVal = toNumberLoose(eurManual)
       if (!Number.isFinite(eurVal) || eurVal < 0) throw new Error('EUR inválido')
       eur_equiv_cents = Math.round(eurVal * 100)
     }
@@ -104,7 +121,7 @@ async function addPayment(e) {
       // USD manual es opcional en modo BTC (si lo escribes, queda anclado)
       let amount_cents = null
       if (amount && String(amount).trim() !== '') {
-        const dollars = Number(amount)
+        const dollars = toNumberLoose(amount)
         if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('USD inválido')
         amount_cents = Math.round(dollars * 100)
       }
@@ -123,7 +140,7 @@ async function addPayment(e) {
       setBtcAmount(''); setAmount(''); setEurManual(''); setNote('')
       
     } else {
-      const dollars = Number(amount)
+      const dollars = toNumberLoose(amount)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
       const amount_cents = Math.round(dollars * 100)
       await api(`/api/debts/${id}/payments`, {
@@ -411,24 +428,21 @@ async function addPayment(e) {
             <tr key={p.id}>
               <td className="small">{fmtDate(p.paid_at)}</td>
               <td>
-                <span className="money big">{money(p.amount_cents, d.currency)}</span>
-                {p.kind === 'CHARGE' && <div className="small" style={{marginTop:4}}>Tipo: <b>AUMENTO</b></div>}
-                {p.kind !== 'CHARGE' && <div className="small" style={{marginTop:4}}>Tipo: <b>ABONO</b></div>}
-                {/* Mostrar valores manuales (EUR/BTC) de forma bien visible */}
-                {(p.eur_equiv_cents != null || p.btc_paid_sats != null) && (
-                  <div className="row" style={{gap:8, flexWrap:'wrap', marginTop:8}}>
-                    {p.eur_equiv_cents != null && (
-                      <span className="pill">EUR €{(Number(p.eur_equiv_cents)/100).toFixed(2)}</span>
-                    )}
-                    {p.btc_paid_sats != null && (
-                      <span className="pill">
-                        BTC {(Number(p.btc_paid_sats)/100000000).toFixed(8)}
-                        {p.btc_rate_usd_at_payment != null ? ` · $${Number(p.btc_rate_usd_at_payment).toFixed(2)}` : ''}
-                        {p.btc_rate_eur_at_payment != null ? ` · €${Number(p.btc_rate_eur_at_payment).toFixed(2)}` : ''}
-                      </span>
-                    )}
+                <div className="money big">{money(p.amount_cents, d.currency)}</div>
+                {p.eur_equiv_cents != null && (
+                  <div className="money big" style={{marginTop:6}}>€{(Number(p.eur_equiv_cents)/100).toFixed(2)}</div>
+                )}
+                {p.btc_paid_sats != null && (
+                  <div className="money big" style={{marginTop:6}}>BTC {(Number(p.btc_paid_sats)/100000000).toFixed(8)}</div>
+                )}
+                {p.btc_paid_sats != null && (p.btc_rate_usd_at_payment != null || p.btc_rate_eur_at_payment != null) && (
+                  <div className="small muted" style={{marginTop:4}}>
+                    Tasa al registrar: {p.btc_rate_usd_at_payment != null ? `$${Number(p.btc_rate_usd_at_payment).toFixed(2)}` : ''}
+                    {p.btc_rate_eur_at_payment != null ? ` · €${Number(p.btc_rate_eur_at_payment).toFixed(2)}` : ''}
                   </div>
                 )}
+                {p.kind === 'CHARGE' && <div className="small" style={{marginTop:6}}>Tipo: <b>AUMENTO</b></div>}
+                {p.kind !== 'CHARGE' && <div className="small" style={{marginTop:6}}>Tipo: <b>ABONO</b></div>}
               </td>
               <td>
                 <span className={'pill ' + (p.confirmation_status === 'CONFIRMED' ? 'ok' : (p.confirmation_status === 'REJECTED' ? 'danger' : ''))}>
