@@ -21,9 +21,6 @@ export async function onRequestPost(context) {
 
   const share = await DB.prepare('SELECT * FROM debt_shares WHERE debt_id=?').bind(p.debt_id).first()
 
-  // Solo aplica confirmación si la deuda es "Yo debo"
-  if (debt.direction !== 'I_OWE') return error(400, 'No requiere confirmación')
-
   // ADMIN puede forzar; si no, solo la contraparte asignada
   if (!isAdmin) {
     if (!share) return error(403, 'Sin contraparte')

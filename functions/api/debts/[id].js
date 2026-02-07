@@ -55,7 +55,7 @@ export async function onRequestGet(context) {
   if (!access) return error(403, 'Sin acceso')
 
   const paymentsRes = await DB.prepare(`
-    SELECT id, amount_cents, paid_at, note, confirmation_status, confirmed_at, confirmation_note, created_at
+    SELECT *
     FROM payments
     WHERE debt_id=?
     ORDER BY paid_at DESC, id DESC
@@ -84,6 +84,9 @@ export async function onRequestGet(context) {
       ...p,
       id: Number(p.id),
       amount_cents: Number(p.amount_cents),
+      btc_paid_sats: p.btc_paid_sats == null ? null : Number(p.btc_paid_sats),
+      btc_rate_usd_at_payment: p.btc_rate_usd_at_payment == null ? null : Number(p.btc_rate_usd_at_payment),
+      btc_rate_eur_at_payment: p.btc_rate_eur_at_payment == null ? null : Number(p.btc_rate_eur_at_payment),
     }))
   })
 }
@@ -140,7 +143,7 @@ export async function onRequestPut(context) {
       if (Number(u.is_active ?? 1) !== 1) return error(400, 'La contraparte está desactivada.')
       if ((u.role || 'user') === 'admin') return error(400, 'No puedes asignar ADMIN como contraparte.')
 
-      const can_confirm = debt.direction === 'I_OWE' ? 1 : 0
+      const can_confirm = 1
 
       if (existing) {
         await DB.prepare(`

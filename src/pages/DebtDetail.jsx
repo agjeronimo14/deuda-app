@@ -32,6 +32,9 @@ export default function DebtDetail({ me }) {
   const [error, setError] = React.useState('')
 
   const [amount, setAmount] = React.useState('')
+  const [btcAmount, setBtcAmount] = React.useState('')
+  const [payMode, setPayMode] = React.useState('usd') // 'usd' | 'btc'
+  const [rates, setRates] = React.useState(null) // {usd, eur}
   const [paid_at, setPaidAt] = React.useState(() => new Date().toISOString().slice(0,10))
   const [note, setNote] = React.useState('')
 
@@ -45,24 +48,60 @@ export default function DebtDetail({ me }) {
     } finally {
       setLoading(false)
     }
+  }async function loadRates() {
+  try {
+    const r = await api('/api/rates/btc')
+    setRates({ usd: r.usd, eur: r.eur })
+  } catch {
+    setRates(null)
   }
+}
 
-  React.useEffect(() => { load() }, [id])
+function btcToSats(str) {
+  const v = Number(String(str || '').trim())
+  if (!Number.isFinite(v) || v <= 0) return null
+  return Math.round(v * 100000000)
+}
 
-  async function addPayment(e) {
-    e.preventDefault()
-    setError('')
-    try {
+function btcPreviewUsd() {
+  const sats = btcToSats(btcAmount)
+  if (!sats || !rates) return null
+  const btc = sats / 100000000
+  return { usd: btc * rates.usd, eur: btc * rates.eur, sats }
+}
+
+React.useEffect(() => { 
+  // preload rates for BTC screen
+  loadRates() 
+}, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+React.useEffect(() => { load() }, [id])
+
+
+async function addPayment(e) {
+  e.preventDefault()
+  setError('')
+  try {
+    const d = data?.debt
+    const btcMode = d?.amount_mode === 'btc_anchored_usd'
+
+    if (btcMode && payMode === 'btc') {
+      const sats = btcToSats(btcAmount)
+      if (!sats) throw new Error('BTC inválido')
+      await api(`/api/debts/${id}/payments`, { method:'POST', body:{ btc_paid_sats: sats, paid_at, note: note || null } })
+      setBtcAmount(''); setNote('')
+    } else {
       const dollars = Number(amount)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
       const amount_cents = Math.round(dollars * 100)
       await api(`/api/debts/${id}/payments`, { method:'POST', body:{ amount_cents, paid_at, note: note || null } })
       setAmount(''); setNote('')
-      await load()
-    } catch(e) {
-      setError(e.message || 'Error')
     }
+    await load()
+  } catch(e) {
+    setError(e.message || 'Error')
   }
+}
 
   async function confirmPayment(pid, ok) {
     setError('')
@@ -134,7 +173,7 @@ export default function DebtDetail({ me }) {
   const isCounterparty = access === 'COUNTERPARTY'
   const canEdit = isOwner || isAdminAccess
   const canAddPayments = isOwner || isAdminAccess
-  const canConfirm = isCounterparty && d.direction === 'I_OWE' && share?.can_confirm
+  const canConfirm = isCounterparty && !!share?.can_confirm
 
   return (
     <div className="card">
@@ -172,6 +211,13 @@ export default function DebtDetail({ me }) {
             </div>
           </div>
           <p className="small">Fecha: {d.due_date || '—'}</p>
+          {d.amount_mode === 'btc_anchored_usd' && (
+            <p className="small">
+              BTC enviado: <b>{(Number(d.btc_sent_sats || 0) / 100000000).toFixed(8)}</b> ·
+              Tasa envío: <b>${Number(d.btc_rate_usd_at_send || 0).toFixed(2)}</b> USD / <b>€{Number(d.btc_rate_eur_at_send || 0).toFixed(2)}</b> EUR
+            </p>
+          )}
+
           <p className="small">Compartida: {share ? '✅' : '—'} · Puede confirmar: {share?.can_confirm ? 'sí' : 'no'}</p>
           {share?.counterparty_username && <p className="small">Usuario contraparte: <b>{share.counterparty_username}</b></p>}
         </div>
@@ -180,8 +226,39 @@ export default function DebtDetail({ me }) {
           <div className="card" style={{padding:12}}>
             <h3>Registrar abono</h3>
             <form onSubmit={addPayment}>
-              <label>Monto (USD)</label>
-              <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+              {d.amount_mode === 'btc_anchored_usd' ? (
+                <>
+                  <label>Modo</label>
+                  <div className="row" style={{gap:8, flexWrap:'wrap'}}>
+                    <button type="button" className={"btn " + (payMode==='btc' ? 'ok' : 'secondary')} onClick={()=>setPayMode('btc')}>BTC</button>
+                    <button type="button" className={"btn " + (payMode==='usd' ? 'ok' : 'secondary')} onClick={()=>setPayMode('usd')}>USD manual</button>
+                    <button type="button" className="btn secondary" onClick={loadRates}>Actualizar tasa</button>
+                  </div>
+
+                  {payMode === 'btc' ? (
+                    <>
+                      <label style={{marginTop:10}}>BTC recibido</label>
+                      <input className="input" value={btcAmount} onChange={e=>setBtcAmount(e.target.value)} placeholder="0.00123456" required />
+                      {btcPreviewUsd() && (
+                        <p className="small" style={{marginTop:8}}>
+                          Preview (a tasa actual): <b>${btcPreviewUsd().usd.toFixed(2)}</b> USD · <b>€{btcPreviewUsd().eur.toFixed(2)}</b> EUR · sats: <b>{btcPreviewUsd().sats}</b>
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <label style={{marginTop:10}}>Monto (USD)</label>
+                      <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <label>Monto (USD)</label>
+                  <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+                </>
+              )}
+
               <div className="grid">
                 <div>
                   <label>Fecha</label>
@@ -194,7 +271,7 @@ export default function DebtDetail({ me }) {
               </div>
               <button className="btn ok" type="submit" style={{marginTop:10}}>Guardar abono</button>
               <p className="small" style={{marginTop:10}}>
-                Si esta deuda es <b>Yo debo</b> y hay contraparte asignada, el abono queda en <b>PENDING</b> hasta que confirme.
+                Si esta deuda tiene contraparte asignada, el abono queda en <b>PENDING</b> hasta que la contraparte confirme o rechace.
               </p>
             </form>
           </div>
@@ -227,7 +304,12 @@ export default function DebtDetail({ me }) {
           ) : (data.payments || []).map(p => (
             <tr key={p.id}>
               <td className="small">{fmtDate(p.paid_at)}</td>
-              <td><span className="money big">{money(p.amount_cents, d.currency)}</span></td>
+              <td>
+                <span className="money big">{money(p.amount_cents, d.currency)}</span>
+                {p.btc_paid_sats != null && (
+                  <div className="small">BTC: {(Number(p.btc_paid_sats)/100000000).toFixed(8)} · tasa: ${Number(p.btc_rate_usd_at_payment||0).toFixed(2)}</div>
+                )}
+              </td>
               <td>
                 <span className={'pill ' + (p.confirmation_status === 'CONFIRMED' ? 'ok' : (p.confirmation_status === 'REJECTED' ? 'danger' : ''))}>
                   {p.confirmation_status}
@@ -289,6 +371,8 @@ async function receiptPng({ debt, payment, owner_username, counterparty_name }) 
   ctx.fillText('Monto:', pad+30, pad+260)
   ctx.fillText('Estado:', pad+30, pad+295)
   ctx.fillText('Nota:', pad+30, pad+330)
+  ctx.fillText('BTC:', pad+30, pad+365)
+  ctx.fillText('Tasa BTCUSD:', pad+30, pad+400)
 
   ctx.fillStyle = '#e8eefc'
   ctx.font = 'bold 18px system-ui, -apple-system, Segoe UI, Roboto'
@@ -304,6 +388,9 @@ async function receiptPng({ debt, payment, owner_username, counterparty_name }) 
 
   ctx.font = '16px system-ui, -apple-system, Segoe UI, Roboto'
   wrapText(ctx, payment.note || '', pad+160, pad+330, w-2*pad-190, 20)
+  ctx.fillText(payment.btc_paid_sats != null ? (Number(payment.btc_paid_sats)/100000000).toFixed(8) : '—', pad+160, pad+365)
+  ctx.fillText(payment.btc_rate_usd_at_payment != null ? ('$' + Number(payment.btc_rate_usd_at_payment).toFixed(2)) : '—', pad+160, pad+400)
+
 
   // footer
   ctx.fillStyle = '#9fb3d6'
