@@ -107,7 +107,9 @@ export async function onRequestPost(context) {
 
   // 2) Vincular contraparte si aplica (sin tokens)
   if (counterparty_user) {
-    const can_confirm = direction === 'I_OWE' ? 1 : 0
+      // En este sistema, si hay contraparte asignada, la contraparte CONFIRMA/RECHAZA los movimientos.
+      // (Aplica tanto para "Yo debo" como para "Me deben").
+      const can_confirm = 1
     const dummy = await sha256Base64Url(randomToken(24))
 
     await DB.prepare(`

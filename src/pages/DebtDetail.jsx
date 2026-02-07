@@ -87,17 +87,55 @@ async function addPayment(e) {
     const d = data?.debt
     const btcMode = d?.amount_mode === 'btc_anchored_usd'
 
+    const kind = moveKind === 'CHARGE' ? 'CHARGE' : 'PAYMENT'
+
+    // EUR manual (opcional)
+    let eur_equiv_cents = null
+    if (eurManual && String(eurManual).trim() !== '') {
+      const eurVal = Number(eurManual)
+      if (!Number.isFinite(eurVal) || eurVal < 0) throw new Error('EUR inválido')
+      eur_equiv_cents = Math.round(eurVal * 100)
+    }
+
     if (btcMode && payMode === 'btc') {
       const sats = btcToSats(btcAmount)
       if (!sats) throw new Error('BTC inválido')
-      await api(`/api/debts/${id}/payments`, { method:'POST', body:{ btc_paid_sats: sats, paid_at, note: note || null } })
-      setBtcAmount(''); setNote('')
+
+      // USD manual es opcional en modo BTC (si lo escribes, queda anclado)
+      let amount_cents = null
+      if (amount && String(amount).trim() !== '') {
+        const dollars = Number(amount)
+        if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('USD inválido')
+        amount_cents = Math.round(dollars * 100)
+      }
+
+      await api(`/api/debts/${id}/payments`, {
+        method:'POST',
+        body:{
+          kind,
+          btc_paid_sats: sats,
+          amount_cents,
+          eur_equiv_cents,
+          paid_at,
+          note: note || null
+        }
+      })
+      setBtcAmount(''); setAmount(''); setEurManual(''); setNote('')
     } else {
       const dollars = Number(amount)
       if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
       const amount_cents = Math.round(dollars * 100)
-      await api(`/api/debts/${id}/payments`, { method:'POST', body:{ amount_cents, paid_at, note: note || null } })
-      setAmount(''); setNote('')
+      await api(`/api/debts/${id}/payments`, {
+        method:'POST',
+        body:{
+          kind,
+          amount_cents,
+          eur_equiv_cents,
+          paid_at,
+          note: note || null
+        }
+      })
+      setAmount(''); setEurManual(''); setNote('')
     }
     await load()
   } catch(e) {
