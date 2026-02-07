@@ -35,6 +35,8 @@ export default function DebtDetail({ me }) {
   const [btcAmount, setBtcAmount] = React.useState('')
   const [payMode, setPayMode] = React.useState('usd') // 'usd' | 'btc'
   const [rates, setRates] = React.useState(null) // {usd, eur}
+  const [eurManual, setEurManual] = React.useState('')
+  const [moveKind, setMoveKind] = React.useState('PAYMENT') // PAYMENT | CHARGE
   const [paid_at, setPaidAt] = React.useState(() => new Date().toISOString().slice(0,10))
   const [note, setNote] = React.useState('')
 
@@ -204,10 +206,16 @@ async function addPayment(e) {
             <div className="stat">
               <div className="statLabel">Principal</div>
               <div className="statValue money xl">{money(d.principal_cents, d.currency)}</div>
+              {d.principal_eur_cents != null && (
+                <div className="small" style={{marginTop:4}}>≈ €{(Number(d.principal_eur_cents)/100).toFixed(2)} EUR</div>
+              )}
             </div>
             <div className="stat">
               <div className="statLabel">Saldo</div>
               <div className="statValue money xl">{money(data.balance_cents, d.currency)}</div>
+              {d.principal_eur_cents != null && (
+                <div className="small" style={{marginTop:4}}>EUR guardado: €{(Number(d.principal_eur_cents)/100).toFixed(2)}</div>
+              )}
             </div>
           </div>
           <p className="small">Fecha: {d.due_date || '—'}</p>
@@ -224,38 +232,75 @@ async function addPayment(e) {
 
         {canAddPayments && (
           <div className="card" style={{padding:12}}>
-            <h3>Registrar abono</h3>
+            <h3>Registrar movimiento</h3>
             <form onSubmit={addPayment}>
+              <label>Tipo</label>
+              <div className="row" style={{gap:8, flexWrap:'wrap'}}>
+                <button type="button" className={"btn " + (moveKind==='PAYMENT' ? 'ok' : 'secondary')} onClick={()=>setMoveKind('PAYMENT')}>Abono (resta)</button>
+                <button type="button" className={"btn " + (moveKind==='CHARGE' ? 'ok' : 'secondary')} onClick={()=>setMoveKind('CHARGE')}>Aumentar deuda (suma)</button>
+              </div>
+
               {d.amount_mode === 'btc_anchored_usd' ? (
                 <>
-                  <label>Modo</label>
+                  <label style={{marginTop:10}}>Modo</label>
                   <div className="row" style={{gap:8, flexWrap:'wrap'}}>
                     <button type="button" className={"btn " + (payMode==='btc' ? 'ok' : 'secondary')} onClick={()=>setPayMode('btc')}>BTC</button>
-                    <button type="button" className={"btn " + (payMode==='usd' ? 'ok' : 'secondary')} onClick={()=>setPayMode('usd')}>USD manual</button>
-                    <button type="button" className="btn secondary" onClick={loadRates}>Actualizar tasa</button>
+                    <button type="button" className={"btn " + (payMode==='usd' ? 'ok' : 'secondary')} onClick={()=>setPayMode('usd')}>USD</button>
+                    <button type="button" className="btn secondary" onClick={loadRates}>Tasa (opcional)</button>
                   </div>
 
                   {payMode === 'btc' ? (
                     <>
-                      <label style={{marginTop:10}}>BTC recibido</label>
+                      <label style={{marginTop:10}}>BTC {moveKind==='PAYMENT' ? 'recibido' : 'enviado'}</label>
                       <input className="input" value={btcAmount} onChange={e=>setBtcAmount(e.target.value)} placeholder="0.00123456" required />
+
+                      <div className="grid" style={{marginTop:10}}>
+                        <div>
+                          <label>{moveKind==='PAYMENT' ? 'USD recibido' : 'USD prestado'} (manual recomendado)</label>
+                          <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" />
+                        </div>
+                        <div>
+                          <label>EUR (opcional)</label>
+                          <input className="input" value={eurManual} onChange={e=>setEurManual(e.target.value)} placeholder="22.00" />
+                        </div>
+                      </div>
+
                       {btcPreviewUsd() && (
                         <p className="small" style={{marginTop:8}}>
-                          Preview (a tasa actual): <b>${btcPreviewUsd().usd.toFixed(2)}</b> USD · <b>€{btcPreviewUsd().eur.toFixed(2)}</b> EUR · sats: <b>{btcPreviewUsd().sats}</b>
+                          Preview (tasa actual): <b>${btcPreviewUsd().usd.toFixed(2)}</b> USD · <b>€{btcPreviewUsd().eur.toFixed(2)}</b> EUR
                         </p>
                       )}
+                      <p className="small" style={{marginTop:6}}>
+                        Si no colocas USD, el sistema intentará calcular con la tasa (si está disponible). Lo mejor es escribir USD manual para que nunca dependa de la tasa.
+                      </p>
                     </>
                   ) : (
                     <>
-                      <label style={{marginTop:10}}>Monto (USD)</label>
-                      <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+                      <div className="grid" style={{marginTop:10}}>
+                        <div>
+                          <label>Monto (USD)</label>
+                          <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+                        </div>
+                        <div>
+                          <label>EUR (opcional)</label>
+                          <input className="input" value={eurManual} onChange={e=>setEurManual(e.target.value)} placeholder="22.00" />
+                        </div>
+                      </div>
                     </>
                   )}
                 </>
               ) : (
                 <>
-                  <label>Monto (USD)</label>
-                  <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+                  <div className="grid" style={{marginTop:10}}>
+                    <div>
+                      <label>Monto (USD)</label>
+                      <input className="input" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="25.00" required />
+                    </div>
+                    <div>
+                      <label>EUR (opcional)</label>
+                      <input className="input" value={eurManual} onChange={e=>setEurManual(e.target.value)} placeholder="22.00" />
+                    </div>
+                  </div>
                 </>
               )}
 
@@ -269,9 +314,13 @@ async function addPayment(e) {
                   <input className="input" value={note} onChange={e=>setNote(e.target.value)} placeholder="Transferencia, efectivo..." />
                 </div>
               </div>
-              <button className="btn ok" type="submit" style={{marginTop:10}}>Guardar abono</button>
+
+              <button className="btn ok" type="submit" style={{marginTop:10}}>
+                Guardar {moveKind==='PAYMENT' ? 'abono' : 'aumento'}
+              </button>
+
               <p className="small" style={{marginTop:10}}>
-                Si esta deuda tiene contraparte asignada, el abono queda en <b>PENDING</b> hasta que la contraparte confirme o rechace.
+                Si esta deuda tiene contraparte asignada, el movimiento queda en <b>PENDING</b> hasta que la contraparte confirme o rechace.
               </p>
             </form>
           </div>
@@ -287,7 +336,7 @@ async function addPayment(e) {
 
       <div className="hr"></div>
 
-      <h3>Abonos</h3>
+      <h3>Movimientos</h3>
       <table className="table">
         <thead>
           <tr>
@@ -300,14 +349,17 @@ async function addPayment(e) {
         </thead>
         <tbody>
           {(data.payments || []).length === 0 ? (
-            <tr><td colSpan="5" className="small">No hay abonos.</td></tr>
+            <tr><td colSpan="5" className="small">No hay movimientos.</td></tr>
           ) : (data.payments || []).map(p => (
             <tr key={p.id}>
               <td className="small">{fmtDate(p.paid_at)}</td>
               <td>
                 <span className="money big">{money(p.amount_cents, d.currency)}</span>
+                {p.kind === 'CHARGE' && <div className="small" style={{marginTop:4}}>Tipo: <b>AUMENTO</b></div>}
+                {p.kind !== 'CHARGE' && <div className="small" style={{marginTop:4}}>Tipo: <b>ABONO</b></div>}
+                {p.eur_equiv_cents != null && <div className="small">EUR: €{(Number(p.eur_equiv_cents)/100).toFixed(2)}</div>}
                 {p.btc_paid_sats != null && (
-                  <div className="small">BTC: {(Number(p.btc_paid_sats)/100000000).toFixed(8)} · tasa: ${Number(p.btc_rate_usd_at_payment||0).toFixed(2)}</div>
+                  <div className="small">BTC: {(Number(p.btc_paid_sats)/100000000).toFixed(8)}{p.btc_rate_usd_at_payment != null ? (' · tasa: $' + Number(p.btc_rate_usd_at_payment).toFixed(2)) : ''}</div>
                 )}
               </td>
               <td>
@@ -369,7 +421,9 @@ async function receiptPng({ debt, payment, owner_username, counterparty_name }) 
   ctx.fillText('Contraparte:', pad+30, pad+190)
   ctx.fillText('Fecha:', pad+30, pad+225)
   ctx.fillText('Monto:', pad+30, pad+260)
-  ctx.fillText('Estado:', pad+30, pad+295)
+  ctx.fillText('EUR:', pad+30, pad+278)
+  ctx.fillText('Tipo:', pad+30, pad+292)
+  ctx.fillText('Estado:', pad+30, pad+324)
   ctx.fillText('Nota:', pad+30, pad+330)
   ctx.fillText('BTC:', pad+30, pad+365)
   ctx.fillText('Tasa BTCUSD:', pad+30, pad+400)
@@ -384,7 +438,14 @@ async function receiptPng({ debt, payment, owner_username, counterparty_name }) 
   const value = (payment.amount_cents || 0) / 100
   ctx.fillText(new Intl.NumberFormat('en-US', { style:'currency', currency: debt.currency || 'USD' }).format(value), pad+160, pad+260)
 
-  ctx.fillText(payment.confirmation_status || '—', pad+160, pad+295)
+  if (payment.eur_equiv_cents != null) {
+    const eurVal = Number(payment.eur_equiv_cents) / 100
+    ctx.fillText(new Intl.NumberFormat('de-DE', { style:'currency', currency: 'EUR' }).format(eurVal), pad+160, pad+278)
+  }
+
+  ctx.fillText((payment.kind || 'PAYMENT') === 'CHARGE' ? 'AUMENTO' : 'ABONO', pad+160, pad+292)
+  ctx.fillText(payment.confirmation_status || '—', pad+160, pad+324)
+
 
   ctx.font = '16px system-ui, -apple-system, Segoe UI, Roboto'
   wrapText(ctx, payment.note || '', pad+160, pad+330, w-2*pad-190, 20)

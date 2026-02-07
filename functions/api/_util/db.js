@@ -15,15 +15,38 @@ export async function getUserByUsername(DB, username) {
 }
 
 export async function computeBalanceCents(DB, debtId) {
-  const row = await DB.prepare(`
-    SELECT d.principal_cents - COALESCE((
-      SELECT SUM(amount_cents) FROM payments
-      WHERE debt_id = ? AND confirmation_status = 'CONFIRMED'
-    ), 0) AS balance_cents
-    FROM debts d
-    WHERE d.id = ?
-  `).bind(debtId, debtId).first()
-  return row ? Number(row.balance_cents) : null
+  // balance = principal + confirmed_charges - confirmed_payments
+  try {
+    const row = await DB.prepare(`
+      SELECT
+        d.principal_cents
+        + COALESCE((
+          SELECT SUM(amount_cents) FROM payments
+          WHERE debt_id = ? AND confirmation_status='CONFIRMED' AND COALESCE(kind,'PAYMENT')='CHARGE'
+        ), 0)
+        - COALESCE((
+          SELECT SUM(amount_cents) FROM payments
+          WHERE debt_id = ? AND confirmation_status='CONFIRMED' AND COALESCE(kind,'PAYMENT')='PAYMENT'
+        ), 0) AS balance_cents
+      FROM debts d
+      WHERE d.id = ?
+    `).bind(debtId, debtId, debtId).first()
+    return row ? Number(row.balance_cents) : null
+  } catch (e) {
+    const msg = String(e?.message || e || '')
+    // If migrations not applied yet, assume legacy behavior: all rows are PAYMENTS (no CHARGE).
+    if (msg.includes('no such column: kind') || msg.includes('no such column: principal_eur_cents')) {
+      const row = await DB.prepare(`
+        SELECT d.principal_cents - COALESCE((
+          SELECT SUM(amount_cents) FROM payments
+          WHERE debt_id = ? AND confirmation_status='CONFIRMED'
+        ), 0) AS balance_cents
+        FROM debts d WHERE d.id = ?
+      `).bind(debtId, debtId).first()
+      return row ? Number(row.balance_cents) : null
+    }
+    throw e
+  }
 }
 
 export async function updateDebtStatusIfPaid(DB, debtId) {

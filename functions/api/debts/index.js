@@ -11,6 +11,7 @@ async function attachBalance(DB, rows) {
       ...r,
       id: Number(r.id),
       principal_cents: Number(r.principal_cents),
+      principal_eur_cents: r.principal_eur_cents == null ? null : Number(r.principal_eur_cents),
       balance_cents: Number(bal ?? 0),
     })
   }
@@ -24,14 +25,14 @@ export async function onRequestGet(context) {
   const { DB } = context.env
 
   const ownedRes = await DB.prepare(`
-    SELECT d.id, d.direction, d.title, d.counterparty_name, d.currency, d.principal_cents, d.due_date, d.status, d.created_at
+    SELECT d.id, d.direction, d.title, d.counterparty_name, d.currency, d.principal_cents, d.principal_eur_cents, d.amount_mode, d.btc_sent_sats, d.btc_rate_usd_at_send, d.btc_rate_eur_at_send, d.due_date, d.status, d.created_at
     FROM debts d
     WHERE d.owner_user_id = ?
     ORDER BY d.created_at DESC
   `).bind(user.id).all()
 
   const sharedRes = await DB.prepare(`
-    SELECT d.id, d.direction, d.title, d.counterparty_name, d.currency, d.principal_cents, d.due_date, d.status, d.created_at,
+    SELECT d.id, d.direction, d.title, d.counterparty_name, d.currency, d.principal_cents, d.principal_eur_cents, d.amount_mode, d.btc_sent_sats, d.btc_rate_usd_at_send, d.btc_rate_eur_at_send, d.due_date, d.status, d.created_at,
            ou.username AS owner_username
     FROM debts d
     JOIN debt_shares s ON s.debt_id = d.id

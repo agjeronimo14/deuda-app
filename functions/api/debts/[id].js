@@ -71,6 +71,7 @@ export async function onRequestGet(context) {
       id: Number(debt.id),
       owner_user_id: Number(debt.owner_user_id),
       principal_cents: Number(debt.principal_cents),
+      principal_eur_cents: debt.principal_eur_cents == null ? null : Number(debt.principal_eur_cents),
     },
     share: share ? {
       ...share,
@@ -87,6 +88,8 @@ export async function onRequestGet(context) {
       btc_paid_sats: p.btc_paid_sats == null ? null : Number(p.btc_paid_sats),
       btc_rate_usd_at_payment: p.btc_rate_usd_at_payment == null ? null : Number(p.btc_rate_usd_at_payment),
       btc_rate_eur_at_payment: p.btc_rate_eur_at_payment == null ? null : Number(p.btc_rate_eur_at_payment),
+      eur_equiv_cents: p.eur_equiv_cents == null ? null : Number(p.eur_equiv_cents),
+      kind: p.kind || 'PAYMENT',
     }))
   })
 }

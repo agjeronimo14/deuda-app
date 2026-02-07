@@ -101,7 +101,12 @@ export default function Dashboard({ me }) {
                     </div>
                   </td>
                   <td><span className="badge">{dirLabel(d.direction, isCounterparty)}</span></td>
-                  <td><span className="money big">{money(d.balance_cents, d.currency)}</span></td>
+                  <td>
+                    <div className="money big">{money(d.balance_cents, d.currency)}</div>
+                    {d.principal_eur_cents != null && (
+                      <div className="small">EUR guardado: €{(Number(d.principal_eur_cents)/100).toFixed(2)}</div>
+                    )}
+                  </td>
                   <td className="small">{d.due_date || '—'}</td>
                   <td><Link className="btn secondary" to={`/debts/${d.id}`}>Abrir</Link></td>
                 </tr>

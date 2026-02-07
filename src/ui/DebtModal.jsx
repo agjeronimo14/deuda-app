@@ -4,7 +4,6 @@ import { api } from '../api.js'
 function toSatsFromBtcString(str) {
   const v = Number(String(str || '').trim())
   if (!Number.isFinite(v) || v <= 0) return null
-  // BTC -> sats (rounded)
   return Math.round(v * 100000000)
 }
 
@@ -14,10 +13,11 @@ export default function DebtModal({ onClose, onCreated, me }) {
   const [counterparty_username, setCounterpartyUsername] = React.useState('')
   const [direction, setDirection] = React.useState('I_OWE')
 
-  // manual USD (para deudas viejas) vs BTC anclado (para "Me deben" tipo renta/bitcoin)
+  // manual USD vs BTC (con montos manuales USD/EUR)
   const [amountMode, setAmountMode] = React.useState('manual_usd') // manual_usd | btc_anchored_usd
 
-  const [principal, setPrincipal] = React.useState('')
+  const [usdPrincipal, setUsdPrincipal] = React.useState('')
+  const [eurPrincipal, setEurPrincipal] = React.useState('')
   const [btcSent, setBtcSent] = React.useState('')
 
   const [rates, setRates] = React.useState(null) // {usd, eur}
@@ -42,11 +42,12 @@ export default function DebtModal({ onClose, onCreated, me }) {
     })()
   }, [])
 
-  // reset modes when switching direction
   React.useEffect(() => {
+    // Cuando es "Yo debo" no usamos modo BTC
     if (direction === 'I_OWE') {
       setAmountMode('manual_usd')
       setBtcSent('')
+      setEurPrincipal('')
       setRates(null)
       setRateErr('')
     }
@@ -63,13 +64,21 @@ export default function DebtModal({ onClose, onCreated, me }) {
     }
   }
 
-  function previewUsdEur() {
+  function previewFromBtc() {
     const sats = toSatsFromBtcString(btcSent)
     if (!sats || !rates) return null
     const btc = sats / 100000000
-    const usd = btc * rates.usd
-    const eur = btc * rates.eur
-    return { usd, eur, sats }
+    return {
+      usd: btc * rates.usd,
+      eur: btc * rates.eur
+    }
+  }
+
+  function fillFromBtcRates() {
+    const pv = previewFromBtc()
+    if (!pv) return
+    setUsdPrincipal(pv.usd.toFixed(2))
+    setEurPrincipal(pv.eur.toFixed(2))
   }
 
   async function submit(e) {
@@ -86,7 +95,6 @@ export default function DebtModal({ onClose, onCreated, me }) {
         direction,
         date,
         notes: notes || null,
-        currency: 'USD',
         amount_mode: amountMode,
       }
 
@@ -97,19 +105,22 @@ export default function DebtModal({ onClose, onCreated, me }) {
         if (!sats) throw new Error('BTC enviado inválido')
         body.btc_sent_sats = sats
 
-        // opcional: mandar la tasa para que el server use la misma que el preview
+        const usd = Number(usdPrincipal)
+        if (!Number.isFinite(usd) || usd <= 0) throw new Error('Monto USD inválido (obligatorio)')
+        body.principal_cents = Math.round(usd * 100)
+
+        const eur = Number(eurPrincipal)
+        if (Number.isFinite(eur) && eur > 0) body.principal_eur_cents = Math.round(eur * 100)
+
+        // opcional: guardar tasas si existen
         if (rates?.usd && rates?.eur) {
           body.btc_rate_usd_at_send = rates.usd
           body.btc_rate_eur_at_send = rates.eur
         }
-
-        // también mandamos un principal estimado (si el server decide ignorarlo, ok)
-        const pv = previewUsdEur()
-        if (pv?.usd) body.principal_cents = Math.round(pv.usd * 100)
       } else {
-        const dollars = Number(principal)
-        if (!Number.isFinite(dollars) || dollars <= 0) throw new Error('Monto inválido')
-        body.principal_cents = Math.round(dollars * 100)
+        const usd = Number(usdPrincipal)
+        if (!Number.isFinite(usd) || usd <= 0) throw new Error('Monto inválido')
+        body.principal_cents = Math.round(usd * 100)
       }
 
       await api('/api/debts', { method:'POST', body })
@@ -122,10 +133,7 @@ export default function DebtModal({ onClose, onCreated, me }) {
     }
   }
 
-  const needCounterparty = true
   const showAmountMode = (direction === 'OWED_TO_ME')
-
-  const pv = previewUsdEur()
 
   return (
     <div className="modalBackdrop" onMouseDown={onClose}>
@@ -137,7 +145,7 @@ export default function DebtModal({ onClose, onCreated, me }) {
 
         <form onSubmit={submit}>
           <label>Título</label>
-          <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Teléfono, préstamo, renta..." required />
+          <input className="input" value={title} onChange={e=>setTitle(e.target.value)} placeholder="Renta, préstamo..." required />
 
           <div className="grid">
             <div>
@@ -149,75 +157,79 @@ export default function DebtModal({ onClose, onCreated, me }) {
             </div>
             <div>
               <label>Contraparte (nombre)</label>
-              <input className="input" value={counterparty_name} onChange={e=>setCounterpartyName(e.target.value)} placeholder="Juan / Maria / Empresa..." />
+              <input className="input" value={counterparty_name} onChange={e=>setCounterpartyName(e.target.value)} placeholder="Juan / Maria..." />
             </div>
           </div>
 
           {showAmountMode && (
             <div style={{marginTop:8}}>
-              <label>Cómo registrar el monto</label>
+              <label>Modo</label>
               <div className="row" style={{gap:8, flexWrap:'wrap'}}>
                 <button type="button" className={"btn " + (amountMode==='manual_usd' ? 'ok' : 'secondary')} onClick={()=>setAmountMode('manual_usd')}>
                   Manual (USD)
                 </button>
                 <button type="button" className={"btn " + (amountMode==='btc_anchored_usd' ? 'ok' : 'secondary')} onClick={()=>setAmountMode('btc_anchored_usd')}>
-                  Automático (BTC → USD/EUR)
+                  BTC (manual USD/EUR)
                 </button>
               </div>
               <p className="small" style={{marginTop:6}}>
-                Manual = para deudas viejas. Automático = guardamos BTC enviado + la tasa del día (USD/EUR) y el principal queda anclado en USD.
+                Recomendado: en BTC, tú escribes el USD (obligatorio) y EUR (opcional). Si quieres, puedes usar la tasa para autollenar, pero no es requerido.
               </p>
             </div>
           )}
 
-          <div className="grid">
-            <div>
-              {direction === 'OWED_TO_ME' && amountMode === 'btc_anchored_usd' ? (
-                <>
-                  <label>BTC enviado</label>
-                  <input className="input" value={btcSent} onChange={e=>setBtcSent(e.target.value)} placeholder="0.00885" required />
-                  <div className="row" style={{marginTop:8, gap:8, flexWrap:'wrap'}}>
-                    <button type="button" className="btn secondary" onClick={loadRates}>Actualizar tasa</button>
-                    {rateErr && <span className="small" style={{color:'var(--danger)'}}>{rateErr}</span>}
-                  </div>
-                  {pv && (
-                    <p className="small" style={{marginTop:8}}>
-                      Preview: <b>${pv.usd.toFixed(2)}</b> USD · <b>€{pv.eur.toFixed(2)}</b> EUR · sats: <b>{pv.sats}</b>
-                    </p>
-                  )}
-                </>
-              ) : (
-                <>
-                  <label>Monto (USD)</label>
-                  <input className="input" value={principal} onChange={e=>setPrincipal(e.target.value)} placeholder="250.00" required />
-                </>
+          {direction === 'OWED_TO_ME' && amountMode === 'btc_anchored_usd' && (
+            <div style={{marginTop:10}}>
+              <label>BTC enviado</label>
+              <input className="input" value={btcSent} onChange={e=>setBtcSent(e.target.value)} placeholder="0.00885" required />
+
+              <div className="grid" style={{marginTop:10}}>
+                <div>
+                  <label>Monto (USD) *</label>
+                  <input className="input" value={usdPrincipal} onChange={e=>setUsdPrincipal(e.target.value)} placeholder="450.00" required />
+                </div>
+                <div>
+                  <label>Equivalente (EUR) opcional</label>
+                  <input className="input" value={eurPrincipal} onChange={e=>setEurPrincipal(e.target.value)} placeholder="410.00" />
+                </div>
+              </div>
+
+              <div className="row" style={{marginTop:10, gap:8, flexWrap:'wrap'}}>
+                <button type="button" className="btn secondary" onClick={loadRates}>Cargar tasa BTC</button>
+                <button type="button" className="btn secondary" onClick={fillFromBtcRates} disabled={!rates}>Autollenar USD/EUR</button>
+                {rateErr && <span className="small" style={{color:'var(--danger)'}}>{rateErr}</span>}
+              </div>
+
+              {previewFromBtc() && (
+                <p className="small" style={{marginTop:8}}>
+                  Preview (tasa actual): <b>${previewFromBtc().usd.toFixed(2)}</b> USD · <b>€{previewFromBtc().eur.toFixed(2)}</b> EUR
+                </p>
               )}
             </div>
-            <div>
-              <label>Fecha</label>
-              <input className="input" type="date" value={date} onChange={e=>setDate(e.target.value)} />
-            </div>
-          </div>
+          )}
 
-          <label>Usuario de la contraparte {needCounterparty ? '(requerido)' : '(opcional)'}</label>
+          {!(direction === 'OWED_TO_ME' && amountMode === 'btc_anchored_usd') && (
+            <div style={{marginTop:10}}>
+              <label>Monto (USD)</label>
+              <input className="input" value={usdPrincipal} onChange={e=>setUsdPrincipal(e.target.value)} placeholder="250.00" required />
+            </div>
+          )}
+
+          <label style={{marginTop:10}}>Usuario de la contraparte (requerido)</label>
           <input
             className="input"
             value={counterparty_username}
             onChange={e=>setCounterpartyUsername(e.target.value)}
             placeholder="ariana"
             list="counterpartyUsers"
-            required={needCounterparty}
+            required
           />
           <datalist id="counterpartyUsers">
             {counterpartyList.map(u => <option key={u.id} value={u.username} />)}
           </datalist>
 
-          <p className="small" style={{marginTop:6}}>
-            Regla: si la contraparte <b>no existe</b>, no se crea la deuda. Pídele al <b>ADMIN</b> que cree ese usuario primero.
-          </p>
-
-          <label>Notas (opcional)</label>
-          <textarea className="input" rows="3" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Detalles, condiciones..." />
+          <label style={{marginTop:10}}>Notas (opcional)</label>
+          <textarea className="input" rows="3" value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Detalles..." />
 
           {error && <p style={{color:'var(--danger)'}}>{error}</p>}
 
