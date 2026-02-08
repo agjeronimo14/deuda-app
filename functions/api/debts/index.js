@@ -68,11 +68,41 @@ export async function onRequestPost(context) {
   const date = body.date ? String(body.date) : (body.due_date ? String(body.due_date) : null) // compat
   const notes = body.notes ? String(body.notes) : null
 
+  // Campos opcionales para modo BTC/EUR (solo afectan 'Me deben')
+  const amount_mode = body.amount_mode
+  const principal_eur_cents = body.principal_eur_cents
+  const btc_sent_sats = body.btc_sent_sats
+  const btc_rate_usd_at_send = body.btc_rate_usd_at_send
+  const btc_rate_eur_at_send = body.btc_rate_eur_at_send
+
   const today = new Date().toISOString().slice(0,10)
   const debt_date = (date && /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(date)) ? date : today
 
   if (!title) return error(400, 'Título requerido')
   if (!Number.isFinite(principal_cents) || principal_cents <= 0) return error(400, 'Monto inválido')
+
+  // Extra campos opcionales (para "Me deben" / BTC / EUR)
+  let mode = (amount_mode === 'btc_anchored_usd') ? 'btc_anchored_usd' : 'manual_usd'
+  let eurCents = (principal_eur_cents == null || principal_eur_cents === '') ? null : Number(principal_eur_cents)
+  if (!Number.isFinite(eurCents) || eurCents <= 0) eurCents = null
+
+  let btcSats = (btc_sent_sats == null || btc_sent_sats === '') ? null : Number(btc_sent_sats)
+  if (!Number.isFinite(btcSats) || btcSats <= 0) btcSats = null
+
+  let rateUsd = (btc_rate_usd_at_send == null || btc_rate_usd_at_send === '') ? null : Number(btc_rate_usd_at_send)
+  if (!Number.isFinite(rateUsd) || rateUsd <= 0) rateUsd = null
+
+  let rateEur = (btc_rate_eur_at_send == null || btc_rate_eur_at_send === '') ? null : Number(btc_rate_eur_at_send)
+  if (!Number.isFinite(rateEur) || rateEur <= 0) rateEur = null
+
+  // Si es "Yo debo", forzamos modo manual y limpiamos BTC/EUR
+  if (direction === 'I_OWE') {
+    mode = 'manual_usd'
+    eurCents = null
+    btcSats = null
+    rateUsd = null
+    rateEur = null
+  }
 
   // Regla A: si la contraparte no existe, NO se crea deuda (para Yo debo)
   if (direction === 'I_OWE' && !counterparty_username) {
@@ -99,9 +129,28 @@ export async function onRequestPost(context) {
 
   // 1) Crear deuda
   const res = await DB.prepare(`
-    INSERT INTO debts (owner_user_id, direction, title, counterparty_name, currency, principal_cents, due_date, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(user.id, direction, title, counterparty_name, currency, principal_cents, debt_date, notes).run()
+    INSERT INTO debts (
+      owner_user_id, direction, title, counterparty_name, currency,
+      principal_cents, principal_eur_cents,
+      amount_mode, btc_sent_sats, btc_rate_usd_at_send, btc_rate_eur_at_send,
+      due_date, notes
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    user.id,
+    direction,
+    title,
+    counterparty_name,
+    currency,
+    principal_cents,
+    eurCents,
+    mode,
+    btcSats,
+    rateUsd,
+    rateEur,
+    debt_date,
+    notes
+  ).run()
 
   const debt_id = Number(res.meta.last_row_id)
 

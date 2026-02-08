@@ -7,6 +7,15 @@ function money(cents, currency='USD') {
   return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
 }
 
+function btcFromSats(sats) {
+  if (sats == null) return '—'
+  const v = Number(sats)
+  if (!Number.isFinite(v) || v <= 0) return '—'
+  const btc = v / 100000000
+  // 8 decimales pero sin ceros finales exagerados
+  return btc.toFixed(8).replace(/0+$/, '').replace(/\.$/, '')
+}
+
 function fmtDate(iso) {
   return iso ? String(iso).slice(0,10) : '—'
 }
@@ -208,6 +217,28 @@ async function addPayment(e) {
     const counterparty_username = prompt('Usuario de la contraparte (vacío para quitar vínculo)', currentCp) 
     if (counterparty_username === null) return
 
+    // BTC/EUR inicial (solo para 'Me deben')
+    let principal_eur_cents = undefined
+    let btc_sent_sats = undefined
+    let amount_mode = d.amount_mode || 'manual_usd'
+    if (d.direction === 'OWED_TO_ME') {
+      const eurDefault = d.principal_eur_cents != null ? (Number(d.principal_eur_cents) / 100).toFixed(2) : ''
+      const eurStr = prompt('Equivalente EUR (opcional)', eurDefault)
+      if (eurStr === null) return
+      const eurTrim = eurStr.trim()
+      principal_eur_cents = eurTrim ? Math.round(Number(eurTrim) * 100) : null
+      if (principal_eur_cents != null && (!Number.isFinite(principal_eur_cents) || principal_eur_cents <= 0)) principal_eur_cents = null
+
+      const btcDefault = d.btc_sent_sats != null ? (Number(d.btc_sent_sats) / 100000000).toFixed(8) : ''
+      const btcStr = prompt('BTC inicial (opcional)', btcDefault)
+      if (btcStr === null) return
+      const btcTrim = btcStr.trim()
+      btc_sent_sats = btcTrim ? Math.round(Number(btcTrim) * 100000000) : null
+      if (btc_sent_sats != null && (!Number.isFinite(btc_sent_sats) || btc_sent_sats <= 0)) btc_sent_sats = null
+
+      amount_mode = btc_sent_sats != null ? 'btc_anchored_usd' : 'manual_usd'
+    }
+
     setError('')
     try{
       await api(`/api/debts/${id}`, { method:'PUT', body:{
@@ -216,6 +247,9 @@ async function addPayment(e) {
         due_date: due_date.trim() || null,
         notes: notes.trim() || null,
         counterparty_username: counterparty_username.trim() || null,
+        principal_eur_cents,
+        btc_sent_sats,
+        amount_mode,
       }})
       await load()
     }catch(e){ setError(e.message || 'Error') }
@@ -262,19 +296,28 @@ async function addPayment(e) {
           <h3>Resumen</h3>
           <div className="stats">
             <div className="stat">
-              <div className="statLabel">Principal</div>
+              <div className="statLabel">Principal (USD)</div>
               <div className="statValue money xl">{money(d.principal_cents, d.currency)}</div>
-              {d.principal_eur_cents != null && (
-                <div className="small" style={{marginTop:4}}>≈ €{(Number(d.principal_eur_cents)/100).toFixed(2)} EUR</div>
-              )}
             </div>
+
             <div className="stat">
-              <div className="statLabel">Saldo</div>
+              <div className="statLabel">Saldo (USD)</div>
               <div className="statValue money xl">{money(data.balance_cents, d.currency)}</div>
-              {d.principal_eur_cents != null && (
-                <div className="small" style={{marginTop:4}}>EUR guardado: €{(Number(d.principal_eur_cents)/100).toFixed(2)}</div>
-              )}
             </div>
+
+            {d.principal_eur_cents != null && (
+              <div className="stat">
+                <div className="statLabel">Equivalente (EUR)</div>
+                <div className="statValue money xl">{money(d.principal_eur_cents, 'EUR')}</div>
+              </div>
+            )}
+
+            {d.btc_sent_sats != null && (
+              <div className="stat">
+                <div className="statLabel">BTC inicial</div>
+                <div className="statValue money xl">{btcFromSats(d.btc_sent_sats)} BTC</div>
+              </div>
+            )}
           </div>
           <p className="small">Fecha: {d.due_date || '—'}</p>
           {d.amount_mode === 'btc_anchored_usd' && (

@@ -72,6 +72,9 @@ export async function onRequestGet(context) {
       owner_user_id: Number(debt.owner_user_id),
       principal_cents: Number(debt.principal_cents),
       principal_eur_cents: debt.principal_eur_cents == null ? null : Number(debt.principal_eur_cents),
+      btc_sent_sats: debt.btc_sent_sats == null ? null : Number(debt.btc_sent_sats),
+      btc_rate_usd_at_send: debt.btc_rate_usd_at_send == null ? null : Number(debt.btc_rate_usd_at_send),
+      btc_rate_eur_at_send: debt.btc_rate_eur_at_send == null ? null : Number(debt.btc_rate_eur_at_send),
     },
     share: share ? {
       ...share,
@@ -118,10 +121,43 @@ export async function onRequestPut(context) {
   const notes = body.notes !== undefined ? (body.notes ? String(body.notes) : null) : debt.notes
   const status = body.status ? String(body.status) : debt.status
 
+  // BTC/EUR (solo aplica a "Me deben")
+  const canUpdateBtc = String(debt.direction || '') === 'OWED_TO_ME'
+
+  const principal_eur_cents_upd = (body.principal_eur_cents !== undefined)
+    ? (body.principal_eur_cents == null || body.principal_eur_cents === '' ? null : Number(body.principal_eur_cents))
+    : debt.principal_eur_cents
+
+  const btc_sent_sats_upd = (body.btc_sent_sats !== undefined)
+    ? (body.btc_sent_sats == null || body.btc_sent_sats === '' ? null : Number(body.btc_sent_sats))
+    : debt.btc_sent_sats
+
+  const amount_mode_upd = (body.amount_mode !== undefined)
+    ? (String(body.amount_mode) === 'btc_anchored_usd' ? 'btc_anchored_usd' : 'manual_usd')
+    : (debt.amount_mode || 'manual_usd')
+
+  const eurFinal = (canUpdateBtc && Number.isFinite(Number(principal_eur_cents_upd)) && Number(principal_eur_cents_upd) > 0)
+    ? Number(principal_eur_cents_upd)
+    : (canUpdateBtc ? null : debt.principal_eur_cents)
+
+  const btcFinal = (canUpdateBtc && Number.isFinite(Number(btc_sent_sats_upd)) && Number(btc_sent_sats_upd) > 0)
+    ? Number(btc_sent_sats_upd)
+    : (canUpdateBtc ? null : debt.btc_sent_sats)
+
+  let modeFinal = canUpdateBtc ? amount_mode_upd : (debt.amount_mode || 'manual_usd')
+  if (!canUpdateBtc) modeFinal = (debt.amount_mode || 'manual_usd')
+
   await DB.prepare(`
-    UPDATE debts SET title=?, counterparty_name=?, due_date=?, notes=?, status=?, updated_at=datetime('now')
+    UPDATE debts SET
+      title=?, counterparty_name=?, due_date=?, notes=?, status=?,
+      principal_eur_cents=?, btc_sent_sats=?, amount_mode=?,
+      updated_at=datetime('now')
     WHERE id=?
-  `).bind(title, counterparty_name, due_date, notes, status, debtId).run()
+  `).bind(
+    title, counterparty_name, due_date, notes, status,
+    eurFinal, btcFinal, modeFinal,
+    debtId
+  ).run()
 
   // (Opcional) vincular/cambiar contraparte por username
   if (body.counterparty_username !== undefined) {
