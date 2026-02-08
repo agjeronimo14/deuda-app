@@ -320,12 +320,14 @@ async function addPayment(e) {
             )}
           </div>
           <p className="small">Fecha: {d.due_date || '—'}</p>
-          {d.amount_mode === 'btc_anchored_usd' && (
-            <p className="small">
-              BTC enviado: <b>{(Number(d.btc_sent_sats || 0) / 100000000).toFixed(8)}</b> ·
-              Tasa envío: <b>${Number(d.btc_rate_usd_at_send || 0).toFixed(2)}</b> USD / <b>€{Number(d.btc_rate_eur_at_send || 0).toFixed(2)}</b> EUR
-            </p>
-          )}
+          {(d.btc_sent_sats != null || d.principal_eur_cents != null || (d.amount_mode === 'btc_anchored_usd' && d.btc_rate_usd_at_send != null)) && (
+              <p className="small">
+                {d.btc_sent_sats != null ? <>BTC inicial: <b>{formatBTCFromSats(d.btc_sent_sats)} BTC</b></> : null}
+                {d.btc_sent_sats != null && d.principal_eur_cents != null ? ' · ' : null}
+                {d.principal_eur_cents != null ? <>EUR inicial: <b>{formatEURCents(d.principal_eur_cents)}</b></> : null}
+                {(d.amount_mode === 'btc_anchored_usd' && d.btc_rate_usd_at_send != null) ? <> · Tasa envío: <b>{formatUSDCents(d.btc_rate_usd_at_send)}</b> / <b>{formatEURCents(d.btc_rate_eur_at_send || 0)}</b></> : null}
+              </p>
+            )}
 
           <p className="small">Compartida: {share ? '✅' : '—'} · Puede confirmar: {share?.can_confirm ? 'sí' : 'no'}</p>
           {share?.counterparty_username && <p className="small">Usuario contraparte: <b>{share.counterparty_username}</b></p>}

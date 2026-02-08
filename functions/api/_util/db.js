@@ -49,6 +49,102 @@ export async function computeBalanceCents(DB, debtId) {
   }
 }
 
+
+export async function computeBalanceEurCents(DB, debtId) {
+  // balance_eur = principal_eur + confirmed_charges_eur - confirmed_payments_eur
+  try {
+    const row = await DB.prepare(`
+      SELECT
+        CASE
+          WHEN d.principal_eur_cents IS NULL
+            AND COALESCE((
+              SELECT COUNT(1) FROM payments
+              WHERE debt_id = ?
+                AND confirmation_status='CONFIRMED'
+                AND eur_equiv_cents IS NOT NULL
+            ), 0) = 0
+          THEN NULL
+          ELSE COALESCE(d.principal_eur_cents, 0)
+            + COALESCE((
+              SELECT SUM(eur_equiv_cents) FROM payments
+              WHERE debt_id = ?
+                AND confirmation_status='CONFIRMED'
+                AND eur_equiv_cents IS NOT NULL
+                AND COALESCE(kind,'PAYMENT')='CHARGE'
+            ), 0)
+            - COALESCE((
+              SELECT SUM(eur_equiv_cents) FROM payments
+              WHERE debt_id = ?
+                AND confirmation_status='CONFIRMED'
+                AND eur_equiv_cents IS NOT NULL
+                AND COALESCE(kind,'PAYMENT')='PAYMENT'
+            ), 0)
+        END AS balance_eur_cents
+      FROM debts d
+      WHERE d.id = ?
+    `).bind(debtId, debtId, debtId, debtId).first()
+    return row ? (row.balance_eur_cents == null ? null : Number(row.balance_eur_cents)) : null
+  } catch (e) {
+    const msg = String(e?.message || e || '')
+    // Legacy DBs won't have these columns
+    if (
+      msg.includes('no such column: principal_eur_cents') ||
+      msg.includes('no such column: eur_equiv_cents') ||
+      msg.includes('no such column: kind')
+    ) {
+      return null
+    }
+    throw e
+  }
+}
+
+export async function computeBalanceBtcSats(DB, debtId) {
+  // balance_btc = btc_initial + confirmed_charges_btc - confirmed_payments_btc
+  try {
+    const row = await DB.prepare(`
+      SELECT
+        CASE
+          WHEN d.btc_sent_sats IS NULL
+            AND COALESCE((
+              SELECT COUNT(1) FROM payments
+              WHERE debt_id = ?
+                AND confirmation_status='CONFIRMED'
+                AND btc_paid_sats IS NOT NULL
+            ), 0) = 0
+          THEN NULL
+          ELSE COALESCE(d.btc_sent_sats, 0)
+            + COALESCE((
+              SELECT SUM(btc_paid_sats) FROM payments
+              WHERE debt_id = ?
+                AND confirmation_status='CONFIRMED'
+                AND btc_paid_sats IS NOT NULL
+                AND COALESCE(kind,'PAYMENT')='CHARGE'
+            ), 0)
+            - COALESCE((
+              SELECT SUM(btc_paid_sats) FROM payments
+              WHERE debt_id = ?
+                AND confirmation_status='CONFIRMED'
+                AND btc_paid_sats IS NOT NULL
+                AND COALESCE(kind,'PAYMENT')='PAYMENT'
+            ), 0)
+        END AS balance_btc_sats
+      FROM debts d
+      WHERE d.id = ?
+    `).bind(debtId, debtId, debtId, debtId).first()
+    return row ? (row.balance_btc_sats == null ? null : Number(row.balance_btc_sats)) : null
+  } catch (e) {
+    const msg = String(e?.message || e || '')
+    if (
+      msg.includes('no such column: btc_sent_sats') ||
+      msg.includes('no such column: btc_paid_sats') ||
+      msg.includes('no such column: kind')
+    ) {
+      return null
+    }
+    throw e
+  }
+}
+
 export async function updateDebtStatusIfPaid(DB, debtId) {
   const bal = await computeBalanceCents(DB, debtId)
   if (bal == null) return

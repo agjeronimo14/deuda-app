@@ -1,6 +1,6 @@
 import { json, error } from '../_util/response.js'
 import { requireUser } from '../_util/auth.js'
-import { computeBalanceCents, updateDebtStatusIfPaid } from '../_util/db.js'
+import { computeBalanceCents, computeBalanceEurCents, computeBalanceBtcSats, updateDebtStatusIfPaid } from '../_util/db.js'
 import { randomToken, sha256Base64Url } from '../_util/crypto.js'
 
 async function getDebtAccess(DB, debtId, user) {
@@ -62,6 +62,8 @@ export async function onRequestGet(context) {
   `).bind(debtId).all()
 
   const balance_cents = await computeBalanceCents(DB, debtId)
+  const balance_eur_cents = await computeBalanceEurCents(DB, debtId)
+  const balance_btc_sats = await computeBalanceBtcSats(DB, debtId)
 
   return json({
     access,
@@ -84,6 +86,8 @@ export async function onRequestGet(context) {
       counterparty_username: share.counterparty_username || null,
     } : null,
     balance_cents: Number(balance_cents ?? 0),
+    balance_eur_cents: balance_eur_cents == null ? null : Number(balance_eur_cents),
+    balance_btc_sats: balance_btc_sats == null ? null : Number(balance_btc_sats),
     payments: (paymentsRes.results || []).map(p => ({
       ...p,
       id: Number(p.id),
