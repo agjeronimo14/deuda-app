@@ -7,7 +7,8 @@ function money(cents, currency='USD') {
   return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
 }
 
-function btcFromSats(sats) {
+
+  function btcFromSats(sats) {
   if (sats == null) return '—'
   const v = Number(sats)
   if (!Number.isFinite(v) || v <= 0) return '—'
@@ -59,16 +60,27 @@ export default function DebtDetail({ me }) {
     } finally {
       setLoading(false)
     }
-  }async function loadRates() {
-  try {
-    const r = await api('/api/rates/btc')
-    setRates({ usd: r.usd, eur: r.eur })
-  } catch {
-    setRates(null)
   }
-}
 
-function toNumberLoose(v){
+  async function loadRates() {
+    try {
+      const r = await api('/api/rates/btc')
+      // The endpoint always returns JSON with ok=true/false (status 200).
+      if (!r?.ok || !r?.usd) {
+        setRates(null)
+        setError(r?.error || 'No se pudo obtener la tasa BTC')
+        return
+      }
+      setRates({ usd: r.usd, eur: r.eur || null })
+      setError(null)
+    } catch {
+      setRates(null)
+      setError('No se pudo obtener la tasa BTC')
+    }
+  }
+
+
+  function toNumberLoose(v){
   if (v == null) return NaN
   let s = String(v).trim()
   if (!s) return NaN
@@ -85,25 +97,26 @@ function toNumberLoose(v){
   return Number(s)
 }
 
-function btcToSats(str) {
+
+  function btcToSats(str) {
   const x = toNumberLoose(str)
   if (!Number.isFinite(x) || x <= 0) return null
   return Math.round(x * 100000000)
 }
 
-function btcPreviewUsd() {
+
+  function btcPreviewUsd() {
   const sats = btcToSats(btcAmount)
-  if (!sats || !rates) return null
+  if (!sats || !rates?.usd) return null
   const btc = sats / 100000000
-  return { usd: btc * rates.usd, eur: btc * rates.eur, sats }
+  const usd = btc * rates.usd
+  const eur = rates.eur ? btc * rates.eur : null
+  return { usd, eur, sats }
 }
 
-React.useEffect(() => { 
-  // preload rates for BTC screen
-  loadRates() 
-}, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Nota: la tasa BTC se carga solo cuando el usuario presiona el botón "Tasa (opcional)".
 
-React.useEffect(() => { load() }, [id])
+  React.useEffect(() => { load() }, [id])
 
 
 async function addPayment(e) {
@@ -322,7 +335,7 @@ async function addPayment(e) {
           <p className="small">Fecha: {d.due_date || '—'}</p>
           {(d.btc_sent_sats != null || d.principal_eur_cents != null || (d.amount_mode === 'btc_anchored_usd' && d.btc_rate_usd_at_send != null)) && (
               <p className="small">
-                {d.btc_sent_sats != null ? <>BTC inicial: <b>{formatBTCFromSats(d.btc_sent_sats)} BTC</b></> : null}
+                {d.btc_sent_sats != null ? <>BTC inicial: <b>{btcFromSats(d.btc_sent_sats)} BTC</b></> : null}
                 {d.btc_sent_sats != null && d.principal_eur_cents != null ? ' · ' : null}
                 {d.principal_eur_cents != null ? <>EUR inicial: <b>{formatEURCents(d.principal_eur_cents)}</b></> : null}
                 {(d.amount_mode === 'btc_anchored_usd' && d.btc_rate_usd_at_send != null) ? <> · Tasa envío: <b>{formatUSDCents(d.btc_rate_usd_at_send)}</b> / <b>{formatEURCents(d.btc_rate_eur_at_send || 0)}</b></> : null}
