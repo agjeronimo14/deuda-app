@@ -70,6 +70,7 @@ export async function onRequestPost(context) {
 
   // Campos opcionales para modo BTC/EUR (solo afectan 'Me deben')
   const amount_mode = body.amount_mode
+  const requires_confirmation = body.requires_confirmation === true ? 1 : 0
   const principal_eur_cents = body.principal_eur_cents
   const btc_sent_sats = body.btc_sent_sats
   const btc_rate_usd_at_send = body.btc_rate_usd_at_send
@@ -133,9 +134,9 @@ export async function onRequestPost(context) {
       owner_user_id, direction, title, counterparty_name, currency,
       principal_cents, principal_eur_cents,
       amount_mode, btc_sent_sats, btc_rate_usd_at_send, btc_rate_eur_at_send,
-      due_date, notes
+      due_date, notes, requires_confirmation
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     user.id,
     direction,
@@ -149,7 +150,8 @@ export async function onRequestPost(context) {
     rateUsd,
     rateEur,
     debt_date,
-    notes
+    notes,
+    requires_confirmation
   ).run()
 
   const debt_id = Number(res.meta.last_row_id)

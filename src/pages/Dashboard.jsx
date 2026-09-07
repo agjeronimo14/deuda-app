@@ -50,7 +50,7 @@ export default function Dashboard({ me }) {
         <div className="split">
           <div>
             <h2>Dashboard</h2>
-            <p className="small">En “Yo debo”, la contraparte confirma o rechaza los abonos.</p>
+            <p className="small">Los movimientos se confirman al guardarlos. La confirmación de contraparte se puede activar por deuda si la necesitas.</p>
           </div>
           <div className="row">
             {canCreateDebt && <button className="btn" onClick={() => setOpen(true)}>+ Nueva deuda</button>}
@@ -60,7 +60,7 @@ export default function Dashboard({ me }) {
 
         {isCounterparty && (
           <p className="small" style={{marginTop:10}}>
-            Tu cuenta es de <b>contraparte</b>: puedes ver deudas compartidas contigo y <b>confirmar/rechazar abonos</b>.
+            Tu cuenta es de <b>contraparte</b>: puedes ver deudas compartidas contigo y, si la deuda lo requiere, <b>confirmar/rechazar movimientos</b>.
           </p>
         )}
 

@@ -5,6 +5,7 @@ import Login from './pages/Login.jsx'
 import Dashboard from './pages/Dashboard.jsx'
 import DebtDetail from './pages/DebtDetail.jsx'
 import Admin from './pages/Admin.jsx'
+import PublicDebt from './pages/PublicDebt.jsx'
 
 function useMe() {
   const [me, setMe] = React.useState(null)
@@ -85,6 +86,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={me ? <Navigate to="/" /> : <Login onAuthed={refresh} />} />
         <Route path="/" element={me ? <Dashboard me={me} /> : <Navigate to="/login" />} />
+        <Route path="/r/:token" element={<PublicDebt />} />
         <Route path="/debts/:id" element={me ? <DebtDetail me={me} /> : <Navigate to="/login" />} />
         <Route path="/admin" element={me ? <Admin me={me} /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/" />} />

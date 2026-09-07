@@ -96,6 +96,7 @@ export default function DebtModal({ onClose, onCreated, me }) {
         date,
         notes: notes || null,
         amount_mode: amountMode,
+        requires_confirmation: false,
       }
 
       if (!body.counterparty_username) throw new Error('Debes indicar el usuario de la contraparte.')

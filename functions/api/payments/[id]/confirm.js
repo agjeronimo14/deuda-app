@@ -34,9 +34,9 @@ export async function onRequestPost(context) {
 
   await DB.prepare(`
     UPDATE payments
-    SET confirmation_status = ?, confirmed_at = datetime('now')
+    SET confirmation_status = ?, confirmed_by_user_id = ?, confirmed_at = datetime('now')
     WHERE id = ?
-  `).bind('CONFIRMED', paymentId).run()
+  `).bind('CONFIRMED', user.id, paymentId).run()
 
   await updateDebtStatusIfPaid(DB, Number(p.debt_id))
 

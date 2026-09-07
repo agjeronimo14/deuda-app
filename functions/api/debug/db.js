@@ -1,6 +1,10 @@
 import { json, error } from '../_util/response.js'
+import { requireAdmin } from '../_util/auth.js'
 
 export async function onRequestGet(context) {
+  const { response } = await requireAdmin(context)
+  if (response) return response
+
   const { DB } = context.env
   if (!DB) return error(500, 'DB binding missing (variable name debe ser DB).')
 

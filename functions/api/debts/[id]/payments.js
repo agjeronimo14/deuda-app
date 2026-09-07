@@ -69,7 +69,7 @@ export async function onRequestPost(context) {
 
   if (amount_cents == null) return error(400, 'Monto requerido')
 
-  // Si hay contraparte con confirmación, queda PENDING
+  // Solo queda pendiente cuando el owner activó explícitamente la confirmación.
   let confirmation_status = 'CONFIRMED'
   const share = await DB.prepare(`
     SELECT can_confirm, accepted_at
@@ -78,7 +78,7 @@ export async function onRequestPost(context) {
     LIMIT 1
   `).bind(debtId).first()
 
-  if (share && Number(share.can_confirm) === 1 && share.accepted_at) {
+  if (Number(debt.requires_confirmation) === 1 && share && Number(share.can_confirm) === 1 && share.accepted_at) {
     confirmation_status = 'PENDING'
   }
 

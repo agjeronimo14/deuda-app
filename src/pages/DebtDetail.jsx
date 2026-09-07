@@ -7,6 +7,13 @@ function money(cents, currency='USD') {
   return new Intl.NumberFormat('en-US', { style:'currency', currency }).format(value)
 }
 
+function formatUSDCents(value) {
+  return new Intl.NumberFormat('en-US', { style:'currency', currency:'USD' }).format(Number(value || 0))
+}
+
+function formatEURCents(value) {
+  return new Intl.NumberFormat('de-DE', { style:'currency', currency:'EUR' }).format(Number(value || 0))
+}
 
   function btcFromSats(sats) {
   if (sats == null) return '—'
@@ -49,12 +56,21 @@ export default function DebtDetail({ me }) {
   const [moveKind, setMoveKind] = React.useState('PAYMENT') // PAYMENT | CHARGE
   const [paid_at, setPaidAt] = React.useState(() => new Date().toISOString().slice(0,10))
   const [note, setNote] = React.useState('')
+  const [publicLink, setPublicLink] = React.useState(null)
+  const [linkExpiryDays, setLinkExpiryDays] = React.useState('90')
+  const [linkMessage, setLinkMessage] = React.useState('')
+  const [linkBusy, setLinkBusy] = React.useState(false)
+  const [reportBusy, setReportBusy] = React.useState(false)
 
   async function load() {
     setLoading(true); setError('')
     try {
-      const d = await api(`/api/debts/${id}`)
+      const [d, publicLinkData] = await Promise.all([
+        api(`/api/debts/${id}`),
+        api(`/api/debts/${id}/public-link`).catch(() => ({ link: null })),
+      ])
       setData(d)
+      setPublicLink(publicLinkData.link || null)
     } catch (e) {
       setError(e.message || 'Error')
     } finally {
@@ -213,6 +229,89 @@ async function addPayment(e) {
     }catch(e){ setError(e.message || 'Error') }
   }
 
+  async function setConfirmationRequired(required) {
+    setError('')
+    try {
+      await api(`/api/debts/${id}`, { method:'PUT', body:{ requires_confirmation: required } })
+      await load()
+    } catch (e) {
+      setError(e.message || 'Error')
+    }
+  }
+
+  async function confirmPendingPayments() {
+    const pending = (data?.payments || []).filter(p => p.confirmation_status === 'PENDING').length
+    if (!pending) return
+    if (!confirm(`¿Confirmar ahora los ${pending} movimiento(s) pendiente(s)? El saldo se actualizará.`)) return
+
+    setError('')
+    try {
+      await api(`/api/debts/${id}/confirm-pending`, { method:'POST', body:{} })
+      await load()
+    } catch (e) {
+      setError(e.message || 'Error')
+    }
+  }
+
+  async function copyText(text) {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return
+    }
+    const input = document.createElement('textarea')
+    input.value = text
+    input.style.position = 'fixed'
+    input.style.opacity = '0'
+    document.body.appendChild(input)
+    input.select()
+    document.execCommand('copy')
+    input.remove()
+  }
+
+  async function generatePublicLink() {
+    setLinkBusy(true); setLinkMessage(''); setError('')
+    try {
+      const result = await api(`/api/debts/${id}/public-link`, {
+        method:'POST',
+        body:{ expires_in_days: Number(linkExpiryDays) },
+      })
+      const url = new URL(result.path, window.location.origin).toString()
+      await copyText(url)
+      setPublicLink({ is_active:true, expires_at: result.expires_at })
+      setLinkMessage('Enlace privado creado y copiado. Al renovarlo, el enlace anterior deja de funcionar.')
+    } catch (e) {
+      setError(e.message || 'No se pudo generar el enlace')
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  async function revokePublicLink() {
+    if (!confirm('¿Desactivar el enlace público? Nadie podrá abrirlo después.')) return
+    setLinkBusy(true); setLinkMessage(''); setError('')
+    try {
+      await api(`/api/debts/${id}/public-link`, { method:'DELETE' })
+      setPublicLink(prev => prev ? { ...prev, is_active:false } : null)
+      setLinkMessage('Enlace desactivado.')
+    } catch (e) {
+      setError(e.message || 'No se pudo desactivar el enlace')
+    } finally {
+      setLinkBusy(false)
+    }
+  }
+
+  async function shareDebtReport() {
+    if (!data) return
+    setReportBusy(true); setError('')
+    try {
+      await reportPng({ debt:data.debt, balance_cents:data.balance_cents, payments:data.payments || [] })
+    } catch (e) {
+      setError(e.message || 'No se pudo generar el reporte')
+    } finally {
+      setReportBusy(false)
+    }
+  }
+
   async function editDebt() {
     const d = data?.debt
     if (!d) return
@@ -281,6 +380,8 @@ async function addPayment(e) {
   const canEdit = isOwner || isAdminAccess
   const canAddPayments = isOwner || isAdminAccess
   const canConfirm = isCounterparty && !!share?.can_confirm
+  const requiresConfirmation = Number(d.requires_confirmation) === 1
+  const pendingPayments = (data.payments || []).filter(p => p.confirmation_status === 'PENDING').length
 
   return (
     <div className="card">
@@ -337,7 +438,7 @@ async function addPayment(e) {
               <p className="small">
                 {d.btc_sent_sats != null ? <>BTC inicial: <b>{btcFromSats(d.btc_sent_sats)} BTC</b></> : null}
                 {d.btc_sent_sats != null && d.principal_eur_cents != null ? ' · ' : null}
-                {d.principal_eur_cents != null ? <>EUR inicial: <b>{formatEURCents(d.principal_eur_cents)}</b></> : null}
+                {d.principal_eur_cents != null ? <>EUR inicial: <b>{money(d.principal_eur_cents, 'EUR')}</b></> : null}
                 {(d.amount_mode === 'btc_anchored_usd' && d.btc_rate_usd_at_send != null) ? <> · Tasa envío: <b>{formatUSDCents(d.btc_rate_usd_at_send)}</b> / <b>{formatEURCents(d.btc_rate_eur_at_send || 0)}</b></> : null}
               </p>
             )}
@@ -345,6 +446,65 @@ async function addPayment(e) {
           <p className="small">Compartida: {share ? '✅' : '—'} · Puede confirmar: {share?.can_confirm ? 'sí' : 'no'}</p>
           {share?.counterparty_username && <p className="small">Usuario contraparte: <b>{share.counterparty_username}</b></p>}
         </div>
+
+        {canEdit && (
+          <div className="card" style={{padding:12}}>
+            <h3>Control y reporte</h3>
+            <p className="small">
+              Confirmación de contraparte: <b>{requiresConfirmation ? 'requerida' : 'no requerida'}</b>.
+            </p>
+            <div className="row">
+              <button
+                className={requiresConfirmation ? 'btn secondary' : 'btn ok'}
+                onClick={() => setConfirmationRequired(!requiresConfirmation)}
+              >
+                {requiresConfirmation ? 'Desactivar confirmación' : 'Activar confirmación'}
+              </button>
+              {pendingPayments > 0 && (
+                <button className="btn warn" onClick={confirmPendingPayments}>
+                  Confirmar {pendingPayments} pendiente(s)
+                </button>
+              )}
+            </div>
+            <p className="small" style={{marginTop:8}}>
+              En modo personal, los nuevos movimientos quedan confirmados al guardarlos.
+            </p>
+
+            <div className="hr"></div>
+            <div className="row">
+              <button className="btn ok" onClick={shareDebtReport} disabled={reportBusy}>
+                {reportBusy ? 'Generando...' : 'Compartir reporte PNG'}
+              </button>
+            </div>
+            <p className="small" style={{marginTop:8}}>
+              En móvil abrirá el menú para compartir; en computadora descargará la imagen.
+            </p>
+
+            <div className="hr"></div>
+            <label>Vencimiento del enlace privado</label>
+            <div className="row">
+              <select className="input" style={{width:190}} value={linkExpiryDays} onChange={e=>setLinkExpiryDays(e.target.value)}>
+                <option value="7">7 días</option>
+                <option value="30">30 días</option>
+                <option value="90">90 días</option>
+                <option value="365">1 año</option>
+                <option value="0">Sin vencimiento</option>
+              </select>
+              <button className="btn" onClick={generatePublicLink} disabled={linkBusy}>
+                {linkBusy ? '...' : (publicLink?.is_active ? 'Renovar y copiar enlace' : 'Generar y copiar enlace')}
+              </button>
+              {publicLink?.is_active && (
+                <button className="btn danger" onClick={revokePublicLink} disabled={linkBusy}>Desactivar enlace</button>
+              )}
+            </div>
+            <p className="small" style={{marginTop:8}}>
+              {publicLink?.is_active
+                ? `Enlace activo${publicLink.expires_at ? ` hasta ${fmtDate(publicLink.expires_at)}` : ', sin vencimiento'}.`
+                : 'El enlace solo permite consultar el reporte; no permite editar nada.'}
+            </p>
+            {linkMessage && <p className="small" style={{color:'var(--ok)'}}>{linkMessage}</p>}
+          </div>
+        )}
 
         {canAddPayments && (
           <div className="card" style={{padding:12}}>
@@ -452,7 +612,9 @@ async function addPayment(e) {
               </button>
 
               <p className="small" style={{marginTop:10}}>
-                Si esta deuda tiene contraparte asignada, el movimiento queda en <b>PENDING</b> hasta que la contraparte confirme o rechace.
+                {requiresConfirmation
+                  ? <>Este movimiento quedará en <b>PENDING</b> hasta que la contraparte lo confirme o rechace.</>
+                  : <>Este movimiento quedará <b>CONFIRMED</b> al guardarlo.</>}
               </p>
             </form>
           </div>
@@ -461,7 +623,7 @@ async function addPayment(e) {
         {!canAddPayments && (
           <div className="card" style={{padding:12}}>
             <h3>Permisos</h3>
-            <p className="small">Eres contraparte: puedes <b>confirmar/rechazar</b> abonos pendientes, pero no puedes registrar abonos ni editar la deuda.</p>
+            <p className="small">Eres contraparte: puedes <b>confirmar/rechazar</b> movimientos pendientes cuando estén habilitados, pero no puedes registrar abonos ni editar la deuda.</p>
           </div>
         )}
       </div>
@@ -603,6 +765,103 @@ async function receiptPng({ debt, payment, owner_username, counterparty_name }) 
   a.href = url
   a.download = `recibo_${debt.id}_${payment.id}.png`
   a.click()
+}
+
+async function reportPng({ debt, balance_cents, payments }) {
+  const confirmed = payments.filter(p => p.confirmation_status === 'CONFIRMED')
+  const totals = confirmed.reduce((result, payment) => {
+    if (payment.kind === 'CHARGE') result.charges += Number(payment.amount_cents || 0)
+    else result.payments += Number(payment.amount_cents || 0)
+    return result
+  }, { payments:0, charges:0 })
+  const latest = confirmed.slice(0, 5)
+  const canvas = document.createElement('canvas')
+  const width = 1200
+  const height = 610 + latest.length * 52
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  const pad = 56
+
+  ctx.fillStyle = '#0b1220'
+  ctx.fillRect(0, 0, width, height)
+  ctx.fillStyle = '#0f1a30'
+  roundRect(ctx, pad, pad, width - pad * 2, height - pad * 2, 22, true, false)
+
+  ctx.fillStyle = '#e8eefc'
+  ctx.font = 'bold 38px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText('Estado de la deuda', pad + 38, pad + 74)
+  ctx.fillStyle = '#9fb3d6'
+  ctx.font = '18px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText(`Actualizado ${new Date().toLocaleDateString('es-ES')}`, pad + 38, pad + 108)
+
+  ctx.fillStyle = '#e8eefc'
+  ctx.font = 'bold 28px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText(debt.title || 'Deuda', pad + 38, pad + 158)
+
+  const summary = [
+    ['Monto inicial', money(debt.principal_cents, debt.currency)],
+    ['Abonado', money(totals.payments, debt.currency)],
+    ['Aumentos', money(totals.charges, debt.currency)],
+    ['Saldo actual', money(balance_cents, debt.currency)],
+  ]
+  const colWidth = (width - pad * 2 - 76) / 2
+  summary.forEach(([label, value], index) => {
+    const col = index % 2
+    const row = Math.floor(index / 2)
+    const x = pad + 38 + col * colWidth
+    const y = pad + 215 + row * 94
+    ctx.fillStyle = '#9fb3d6'
+    ctx.font = '17px system-ui, -apple-system, Segoe UI, Roboto'
+    ctx.fillText(label, x, y)
+    ctx.fillStyle = label === 'Saldo actual' ? '#bbf7d0' : '#e8eefc'
+    ctx.font = 'bold 30px system-ui, -apple-system, Segoe UI, Roboto'
+    ctx.fillText(value, x, y + 36)
+  })
+
+  const historyStart = pad + 420
+  ctx.fillStyle = '#9fb3d6'
+  ctx.font = 'bold 18px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText('Últimos movimientos confirmados', pad + 38, historyStart)
+  if (!latest.length) {
+    ctx.font = '17px system-ui, -apple-system, Segoe UI, Roboto'
+    ctx.fillText('Aún no hay movimientos confirmados.', pad + 38, historyStart + 40)
+  }
+  latest.forEach((payment, index) => {
+    const y = historyStart + 46 + index * 52
+    const isCharge = payment.kind === 'CHARGE'
+    ctx.fillStyle = '#9fb3d6'
+    ctx.font = '16px system-ui, -apple-system, Segoe UI, Roboto'
+    ctx.fillText(fmtDate(payment.paid_at), pad + 38, y)
+    ctx.fillStyle = isCharge ? '#fde68a' : '#bbf7d0'
+    ctx.font = 'bold 18px system-ui, -apple-system, Segoe UI, Roboto'
+    ctx.fillText(`${isCharge ? 'Aumento' : 'Abono'}: ${money(payment.amount_cents, debt.currency)}`, pad + 220, y)
+  })
+
+  ctx.fillStyle = '#9fb3d6'
+  ctx.font = '14px system-ui, -apple-system, Segoe UI, Roboto'
+  ctx.fillText('Reporte generado por Deuda App', pad + 38, height - pad - 24)
+
+  const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error('No se pudo crear la imagen')
+
+  const filename = `reporte_deuda_${debt.id}.png`
+  const file = new File([blob], filename, { type:'image/png' })
+  if (navigator.share && (!navigator.canShare || navigator.canShare({ files:[file] }))) {
+    try {
+      await navigator.share({ title:'Estado de la deuda', text:`Reporte: ${debt.title || 'Deuda'}`, files:[file] })
+      return
+    } catch (e) {
+      if (e?.name === 'AbortError') return
+    }
+  }
+
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 function roundRect(ctx, x, y, width, height, radius, fill, stroke) {

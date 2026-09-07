@@ -124,6 +124,9 @@ export async function onRequestPut(context) {
   const due_date = body.due_date !== undefined ? (body.due_date ? String(body.due_date) : null) : debt.due_date
   const notes = body.notes !== undefined ? (body.notes ? String(body.notes) : null) : debt.notes
   const status = body.status ? String(body.status) : debt.status
+  const requires_confirmation = body.requires_confirmation !== undefined
+    ? (body.requires_confirmation === true ? 1 : 0)
+    : (Number(debt.requires_confirmation) === 1 ? 1 : 0)
 
   // BTC/EUR (solo aplica a "Me deben")
   const canUpdateBtc = String(debt.direction || '') === 'OWED_TO_ME'
@@ -155,11 +158,12 @@ export async function onRequestPut(context) {
     UPDATE debts SET
       title=?, counterparty_name=?, due_date=?, notes=?, status=?,
       principal_eur_cents=?, btc_sent_sats=?, amount_mode=?,
+      requires_confirmation=?,
       updated_at=datetime('now')
     WHERE id=?
   `).bind(
     title, counterparty_name, due_date, notes, status,
-    eurFinal, btcFinal, modeFinal,
+    eurFinal, btcFinal, modeFinal, requires_confirmation,
     debtId
   ).run()
 
